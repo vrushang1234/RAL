@@ -1,4 +1,4 @@
-"""RAL - Entry Point: run/train + workflow library + AppShell."""
+"""RAL - Entry Point: run/train + workflow library + optimizer reports + AppShell."""
 
 import from endpoints {
     run_single,
@@ -9,6 +9,7 @@ import from endpoints {
     delete_workflow,
     validate_workflow
 }
+import from api { TrainingStatus, AcceptedChanges, Frontier, ExplorationReport, SafetyCheck }
 
 cl {
     import from .client.AppShell { AppShell }
