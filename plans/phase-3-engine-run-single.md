@@ -61,7 +61,7 @@ Create `scripts/validate_d1.jac`:
 ```jac
 import from jaclang.byllm.lib { Model }
 
-glob llm: Model = Model(model_name="gpt-4o-mini");
+glob llm: Model = Model(model_name="gemini/gemini-2.0-flash");
 
 def run_agent(role_description: str, instructions: str, input_json: str) -> str by llm();
 sem run_agent = "Act according to the given role and follow the instructions to transform the input.";
@@ -78,8 +78,8 @@ with entry {
 ```
 
 `jac run scripts/validate_d1.jac`. PASS = outputs follow their respective instructions.
-FAIL = fall back per DESIGN D1: implement `run_agent` as a plain Jac function calling the OpenAI
-SDK via Python interop (same signature) and continue immediately — the rest of the phase is
+FAIL = fall back per DESIGN D1: implement `run_agent` as a plain Jac function calling the Google
+Gemini SDK via Python interop (same signature) and continue immediately — the rest of the phase is
 unchanged either way.
 
 ## Step 2 — `engine/llm.jac`
@@ -87,7 +87,7 @@ unchanged either way.
 ```jac
 import from jaclang.byllm.lib { Model }
 
-glob llm: Model = Model(model_name="gpt-4o-mini");
+glob llm: Model = Model(model_name="gemini/gemini-2.0-flash");
 
 obj RouteChoice {
     has route: str;

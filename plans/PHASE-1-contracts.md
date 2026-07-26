@@ -170,19 +170,19 @@ def optimize(payload: dict) -> dict:
 
 ## Task 5 — Environment
 
-1. Create `.env` at repo root: `OPENAI_API_KEY=<key>`. Ensure `.env` is in `.gitignore` (append if missing).
+1. Create `.env` at repo root: `GOOGLE_API_KEY=<key>`. Ensure `.env` is in `.gitignore` (append if missing).
 2. Add to `jac.toml`:
 
 ```toml
 [byllm.model]
-default_model = "gpt-4o-mini"
+default_model = "gemini/gemini-2.0-flash"
 ```
 
-(`gpt-4o-mini`-class speed is mandatory: the demo runs on a 4-minute clock and each train step makes 3–5 LLM calls.)
+(`gemini/gemini-2.0-flash` — free-tier Gemini Flash; the demo runs on a 4-minute clock and each train step makes 3–5 LLM calls.)
 
 ## Task 6 — Teammate coordination (send now, do NOT block on reply)
 
-Send the RL owner: (a) both schema files; (b) the `optimize(payload: dict) -> dict` signature — raise on failure, never return partial JSON; (c) the D9 mapping (mutations target `prompt_config.system_prompt` only, platform bumps `prompt_version`); (d) request their `requirements.txt` to merge; (e) agree both sides read `OPENAI_API_KEY`.
+Send the RL owner: (a) both schema files; (b) the `optimize(payload: dict) -> dict` signature — raise on failure, never return partial JSON; (c) the D9 mapping (mutations target `prompt_config.system_prompt` only, platform bumps `prompt_version`); (d) request their `requirements.txt` to merge; (e) agree both sides read `GOOGLE_API_KEY` and use Gemini Flash.
 
 ## Gate — all must pass before Phase 2
 

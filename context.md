@@ -2,30 +2,31 @@
 
 ## Current Goals
 
-- Build the Visual Multi-Agent Platform with RL Prompt Optimization for JacHacks SF 2026.
-- Follow `DESIGN.md` as the source of truth — **full-stack Jac** (client + server).
-- Hour 1 next: freeze schemas with RL owner (including D9), scaffold/verify web-app,
-  prove React Flow imports in Jac client.
+- Demo-ready product with workflow CRUD + flow grammar.
+- **Pending Phase 5:** teammate `teammate_rl.py` → flip import in `rl_bridge.py`.
+- Optional: add `GOOGLE_API_KEY` to `.env` for live Gemini.
 
 ## Architectural Decisions
 
-- **D0** Full-stack Jac web-app: Jac client (JSX + React Flow via npm) + Jac server;
-  `jac start --dev main.jac`. No React/TS app, no FastAPI. ~90–95% Jac.
-- **D1** Prompt-as-parameter: mutable prompts are node data passed into `by llm()`, not semstrings.
-- **D2** Stateless server graph; Jac client WorkflowDefinition is the source of truth.
-- **D3** RL black box: `optimize(payload: dict) -> dict`, imported into Jac from `rl_bridge.py`.
-- **D4** RL owns scoring; no Critic node in the graph.
-- **D5** Single-branch routing via `ROUTE_VALUE` edges.
-- **D6** Jac-client-driven training loop; no SSE/WebSockets.
-- **D7** Native Jac endpoints only (`def:pub` / `walker:pub`); no FastAPI/Express.
-- **D8** Fail-fast abort; FAILED + SKIPPED still sent to RL.
-- **D9** RL mutates `prompt_config.system_prompt` (mapped to `current_sem_prompt` in the RL payload); bumps `prompt_version`.
-- **D10** Minimal JSONPath: `$` and `$.dotted.path` only.
-- **D11** Tools/skills/TOOL_LOOP/per-node models: parsed, not executed in v1.
-- **D12** Aggregator required upstreams = intersection with activated nodes.
+- **D0–D12** as in `DESIGN.md`.
+- **Flow grammar (CRUD):** exactly one Trigger (`entry_node_id`) and one Aggregator (`output_node_id`);
+  adjacency Trigger→Router, Router→Agent|Router, Agent→Agent|Router|Aggregator; Pattern B fan-out allowed.
+  Full validation on Save / Run / Train; illegal edges rejected immediately on connect.
+- **Workflow library:** `WorkflowDoc` nodes on `root` via `list/get/save/delete_workflow` (definitions only — not execution graphs).
 
 ## Recent Changes
 
-- 2026-07-26: Rewrote `DESIGN.md` for full-stack Jac (D0/D7); removed React/TS + FastAPI path.
-- 2026-07-26: Added `DESIGN.md` (WorkflowDefinition schema + locked decisions).
-- 2026-07-26: Initialized `context.md`.
+- 2026-07-26: **Library/canvas bugfixes.** New → blank canvas; Backspace/Delete remove nodes;
+  `get_workflow` RPC alias fixed (was 404 as `fetch_workflow`); after Delete → blank draft +
+  controlled Load select so deleted ids are not re-fetched.
+- 2026-07-26: **Workflow CRUD + flow grammar.**
+  - `engine/flow_grammar.jac` + `client/flow_grammar.cl.jac`
+  - `engine/workflow_library.jac`; endpoints re-export library + `validate_workflow`
+  - Canvas: +Trigger/Router/Agent/Aggregator, connect, delete node/edge; library New/Save/Load/Delete
+  - Verified: demo validates; illegal Agent→Trigger rejected on save; triage Run Once still routes
+- 2026-07-26: Phase 6 polish; Phase 5 deferred; Phases 1–4 complete.
+
+## Teammate message (Phase 5)
+
+Drop `teammate_rl.py` implementing `optimize(payload: dict) -> dict`, then in `rl_bridge.py`:
+`from teammate_rl import optimize as _impl` and restart.

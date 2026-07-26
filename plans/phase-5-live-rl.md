@@ -29,7 +29,7 @@ from teammate_rl import optimize as _impl
 3. Merge their `requirements.txt`: `jac install <pkg>` per package (installs into the project's
    `.jac/venv`). If a dependency conflicts with the Jac stack and can't be resolved in ~10 min,
    switch to the HTTP fallback (below) instead of fighting it.
-4. Confirm they read `OPENAI_API_KEY` (or add their env var name to `.env`).
+4. Confirm they read `GOOGLE_API_KEY` and use Gemini Flash (or add their env var name to `.env`).
 5. **Full server restart** — server modules and Python imports do not hot-reload:
    `pkill -f "jac start"; jac start --dev main.jac < /dev/null`.
 

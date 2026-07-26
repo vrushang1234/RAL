@@ -116,7 +116,8 @@ def optimize(payload: dict) -> dict:
   RL development, demo replay insurance).
 - Expected slow (10–30 s): endpoint is a normal Jac server call; client shows
   "step running…" and surfaces failures into the Training Console.
-- Shared `.env` / `OPENAI_API_KEY` for platform byLLM and RL LLM calls.
+- Shared `.env` / `GOOGLE_API_KEY` for platform byLLM and RL LLM calls
+  (model: `gemini/gemini-2.0-flash` — free-tier Gemini Flash).
 - Contracts frozen after Hour 1; changes additive + optional only.
 
 ### D4 — RL engine owns scoring; no Critic node
@@ -299,8 +300,8 @@ Every edit: `jac check .`.
 ### 5.1 Server engine sketch
 
 ```jac
-import from byllm.llm { Model }
-glob llm = Model(model_name="gpt-4o-mini");   # fast model — 4-minute demo clock
+import from jaclang.byllm.lib { Model }
+glob llm = Model(model_name="gemini/gemini-2.0-flash");   # free-tier Flash — 4-minute demo clock
 
 """Act according to the given role and follow the instructions
 to transform the input into the required output."""

@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RLOptimizerResponse",
+  "type": "object",
+  "required": ["critic_score", "analysis_log", "prompt_mutations"],
+  "properties": {
+    "critic_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "analysis_log": { "type": "string" },
+    "prompt_mutations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node_id", "new_sem_prompt"],
+        "properties": {
+          "node_id": { "type": "string" },
+          "new_sem_prompt": { "type": "string" }
+        }
+      }
+    }
+  }
+}

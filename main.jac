@@ -1,15 +1,19 @@
-"""RAL - Entry Point.
+"""RAL - Entry Point: run/train + workflow library + AppShell."""
 
-Combines server-side endpoints with the client-side UI.
-"""
+import from endpoints {
+    run_single,
+    train_step,
+    list_workflows,
+    get_workflow,
+    save_workflow,
+    delete_workflow,
+    validate_workflow
+}
 
-import from endpoints { Message, PostMessage, ListMessages }
-
-# Client-side UI
 cl {
-    import from .frontend { app as ClientApp }
+    import from .client.AppShell { AppShell }
 
     def:pub app -> JsxElement {
-        return <ClientApp/>;
+        return <AppShell />;
     }
 }

@@ -173,13 +173,13 @@ python3 -c "from rl_bridge import optimize; print(optimize({'agent_states':[{'no
 
 ## Task 3 — Environment
 
-1. Create `.env` with `OPENAI_API_KEY=<key>` (ask the user for the key if not present).
+1. Create `.env` with `GOOGLE_API_KEY=<key>` (ask the user for the key if not present).
 2. Ensure `.env` is listed in `.gitignore`.
 3. Append to `jac.toml`:
 
 ```toml
 [byllm.model]
-default_model = "gpt-4o-mini"
+default_model = "gemini/gemini-2.0-flash"
 ```
 
 ## Task 4 — Teammate coordination (send, don't block)
@@ -189,7 +189,7 @@ Send the RL owner this message (verbatim intent):
   output `schemas/rl_optimizer_response.json`. Raise on failure, never return partial JSON."
 - "Mutation target is `prompt_config.system_prompt` only (we map it to `current_sem_prompt` in the
   payload). We bump `prompt_version` on our side."
-- "We both read `OPENAI_API_KEY`. Send your requirements.txt now."
+- "We both read `GOOGLE_API_KEY` and use `gemini/gemini-2.0-flash`. Send your requirements.txt now."
 
 ## Task 5 — React Flow-in-Jac spike (the phase's real risk)
 

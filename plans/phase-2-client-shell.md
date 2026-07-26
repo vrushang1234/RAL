@@ -3,7 +3,7 @@
 > Self-contained execution spec. Architecture: [DESIGN.md](../DESIGN.md).
 > Prior state (Phase 1): schemas committed in `schemas/`, `rl_bridge.py`/`mock_rl.py` working,
 > `@xyflow/react` proven in `client/CanvasSpike.jac` (or SVG fallback with the same
-> `nodes`/`edges` list contract), `[byllm.model] default_model = "gpt-4o-mini"` in `jac.toml`.
+> `nodes`/`edges` list contract), `[byllm.model] default_model = "gemini/gemini-2.0-flash"` in `jac.toml`.
 
 ## Context you must know
 
