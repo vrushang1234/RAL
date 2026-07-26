@@ -21,20 +21,30 @@ def:pub FlowCanvas(
     }
 
     def handle_nodes_change(changes: any) {
+        # Only persist drags. Ignore RF "remove" here — switching workflows
+        # emits removes for the old graph and would wipe the new canvas.
         if not changes {
             return;
         }
-        change_list: list = changes as list;
-        for c in change_list {
+        for c in (changes as list) {
             ctype: any = c["type"] if c else None;
-            cid: any = c["id"] if c else None;
-            if ctype == "position" {
+            if ctype == "position" and not c["dragging"] {
                 pos: any = c["position"] if c else None;
+                cid: any = c["id"] if c else None;
                 if cid and pos {
                     on_nodes_change(str(cid), float(pos["x"]), float(pos["y"]));
                 }
-            } elif ctype == "remove" and cid {
-                on_delete_node(str(cid));
+            }
+        }
+    }
+
+    def handle_nodes_delete(deleted: any) {
+        if not deleted {
+            return;
+        }
+        for n in (deleted as list) {
+            if n and n["id"] {
+                on_delete_node(str(n["id"]));
             }
         }
     }
@@ -45,13 +55,18 @@ def:pub FlowCanvas(
         }
     }
 
-    def handle_edges_change(changes: any) {
-        if not changes {
+    def handle_edges_change(_changes: any) {
+        # Edge removes come through onEdgesDelete to avoid switch-workflow wipes.
+        return;
+    }
+
+    def handle_edges_delete(deleted: any) {
+        if not deleted {
             return;
         }
-        for c in (changes as list) {
-            if c and c["type"] == "remove" and c["id"] {
-                on_delete_edge(str(c["id"]));
+        for e in (deleted as list) {
+            if e and e["id"] {
+                on_delete_edge(str(e["id"]));
             }
         }
     }
@@ -84,15 +99,20 @@ def:pub FlowCanvas(
         }];
     }
 
+    wid: str = str(workflow["workflow_id"]) if workflow and workflow["workflow_id"] else "wf";
+
     return <div style={{"flex": "1", "height": "100%", "minWidth": "0", "background": "#020617"}}>
         <ReactFlow
+            key={wid}
             nodes={rf_nodes}
             edges={rf_edges}
             nodeTypes={AGENT_NODE_TYPES}
             onNodeClick={handle_node_click}
             onNodesChange={handle_nodes_change}
+            onNodesDelete={handle_nodes_delete}
             onConnect={handle_connect}
             onEdgesChange={handle_edges_change}
+            onEdgesDelete={handle_edges_delete}
             deleteKeyCode={["Backspace", "Delete"]}
             fitView={True}
             proOptions={{"hideAttribution": True}}

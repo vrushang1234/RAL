@@ -16,6 +16,11 @@
 
 ## Recent Changes
 
+- 2026-07-26: **Rename UI.** Header edits `workflow_name`; inspector edits `node_name`
+  (canvas label updates live). IDs unchanged; Save persists library name.
+- 2026-07-26: **Blank-canvas / library UX fix.** Demo always re-seeded + opened on load;
+  New creates blank draft listed as “(unsaved)” in Load; RF remounts per workflow_id;
+  node delete via onNodesDelete (no wipe on workflow switch); demo protected from Delete.
 - 2026-07-26: **Library/canvas bugfixes.** New → blank canvas; Backspace/Delete remove nodes;
   `get_workflow` RPC alias fixed (was 404 as `fetch_workflow`); after Delete → blank draft +
   controlled Load select so deleted ids are not re-fetched.
