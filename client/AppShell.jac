@@ -1,0 +1,603 @@
+"""Stateful shell: WorkflowDefinition CRUD + canvas + library + training console."""
+
+sv import from endpoints {
+    list_workflows,
+    get_workflow,
+    save_workflow,
+    delete_workflow
+}
+
+import from .demo_workflow { DEMO_WORKFLOW, DEMO_DATASET }  # demo_workflow.cl.jac
+import from .flow_grammar { validate_flow }  # flow_grammar.cl.jac
+import from .node_templates { make_node, edge_allowed }  # node_templates.cl.jac
+import from .FlowCanvas { FlowCanvas }
+import from .NodeInspector { NodeInspector }
+import from .TrainingConsole { TrainingConsole }
+
+def:pub AppShell -> JsxElement {
+    has workflow: dict = DEMO_WORKFLOW;
+    has workflow_box: dict = {"current": DEMO_WORKFLOW};
+    has train_control: dict = {"active": False};
+    has logs: list = [];
+    has selected_node_id: str = "";
+    has running: bool = False;
+    has last_output: str = "";
+    has library: list = [];
+    has grammar_errors: list = [];
+    has id_counter: int = 1;
+    has load_select: str = "";
+
+    def blank_workflow(workflow_id: str, name: str) -> dict {
+        return {
+            "schema_version": "1.0.0",
+            "workflow_id": workflow_id,
+            "workflow_name": name,
+            "workflow_version": 1,
+            "configuration_hash": None,
+            "status": "DRAFT",
+            "description": "",
+            "entry_node_id": "",
+            "output_node_id": "",
+            "input_schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"input": {"type": "string"}},
+                "required": ["input"]
+            },
+            "output_schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"output": {"type": "string"}},
+                "required": ["output"]
+            },
+            "global_config": DEMO_WORKFLOW["global_config"],
+            "tool_catalog": [],
+            "skill_catalog": [],
+            "nodes": [],
+            "edges": [],
+            "metadata": {
+                "created_at": "2026-07-26T00:00:00Z",
+                "updated_at": "2026-07-26T00:00:00Z",
+                "created_by": "user",
+                "tags": []
+            }
+        };
+    }
+
+    def replace_workflow(next_wf: dict) {
+        workflow_box["current"] = next_wf;
+        workflow = next_wf;
+        v = validate_flow(next_wf);
+        grammar_errors = v["errors"] as list if v["errors"] else [];
+    }
+
+    def current_workflow() -> dict {
+        return workflow_box["current"] as dict;
+    }
+
+    def append_logs(entries: list) {
+        if not entries {
+            return;
+        }
+        logs = logs + entries;
+    }
+
+    def append_log(kind: str, text: str) {
+        logs = logs + [{"kind": kind, "text": text}];
+    }
+
+    def on_select_node(node_id: str) {
+        selected_node_id = node_id;
+    }
+
+    def on_close_inspector() {
+        selected_node_id = "";
+    }
+
+    def count_kind(base: dict, kind: str) -> int {
+        n = 0;
+        for nitem in (base["nodes"] as list) {
+            if str(nitem["type"]) == kind {
+                n = n + 1;
+            }
+        }
+        return n;
+    }
+
+    def kind_of(base: dict, nid: str) -> str {
+        for nitem in (base["nodes"] as list) {
+            if str(nitem["node_id"]) == nid {
+                return str(nitem["type"]);
+            }
+        }
+        return "";
+    }
+
+    def rebuild_workflow(base: dict, new_nodes: list, new_edges: list) -> dict {
+        entry = str(base["entry_node_id"]);
+        output = str(base["output_node_id"]);
+        for nitem in new_nodes {
+            if str(nitem["type"]) == "Trigger" {
+                entry = str(nitem["node_id"]);
+            }
+            if str(nitem["type"]) == "Aggregator" {
+                output = str(nitem["node_id"]);
+            }
+        }
+        return {
+            "schema_version": base["schema_version"],
+            "workflow_id": base["workflow_id"],
+            "workflow_name": base["workflow_name"],
+            "workflow_version": base["workflow_version"],
+            "configuration_hash": base["configuration_hash"],
+            "status": base["status"],
+            "description": base["description"],
+            "entry_node_id": entry,
+            "output_node_id": output,
+            "input_schema": base["input_schema"],
+            "output_schema": base["output_schema"],
+            "global_config": base["global_config"],
+            "tool_catalog": base["tool_catalog"],
+            "skill_catalog": base["skill_catalog"],
+            "nodes": new_nodes,
+            "edges": new_edges,
+            "metadata": base["metadata"]
+        };
+    }
+
+    def on_update_prompt(node_id: str, new_prompt: str) {
+        base: dict = current_workflow();
+        new_nodes: list = [];
+        for n in (base["nodes"] as list) {
+            if n["node_id"] == node_id {
+                pc: any = n["prompt_config"];
+                if pc {
+                    new_pc: dict = {
+                        "prompt_id": pc["prompt_id"],
+                        "prompt_version": pc["prompt_version"],
+                        "system_prompt": new_prompt,
+                        "user_prompt_template": pc["user_prompt_template"],
+                        "output_instructions": pc["output_instructions"],
+                        "variables": pc["variables"]
+                    };
+                    new_nodes = new_nodes + [{
+                        "node_id": n["node_id"],
+                        "node_name": n["node_name"],
+                        "type": n["type"],
+                        "enabled": n["enabled"],
+                        "fixed_role_description": n["fixed_role_description"],
+                        "expected_input_schema": n["expected_input_schema"],
+                        "expected_output_schema": n["expected_output_schema"],
+                        "prompt_config": new_pc,
+                        "model_config": n["model_config"],
+                        "skill_bindings": n["skill_bindings"],
+                        "tool_bindings": n["tool_bindings"],
+                        "runtime_config": n["runtime_config"],
+                        "type_config": n["type_config"],
+                        "ui": n["ui"]
+                    }];
+                } else {
+                    new_nodes = new_nodes + [n];
+                }
+            } else {
+                new_nodes = new_nodes + [n];
+            }
+        }
+        replace_workflow(rebuild_workflow(base, new_nodes, base["edges"] as list));
+        append_log("info", "Updated system_prompt on " + node_id);
+    }
+
+    def on_nodes_change(node_id: str, x: float, y: float) {
+        base: dict = current_workflow();
+        new_nodes: list = [];
+        for n in (base["nodes"] as list) {
+            if n["node_id"] == node_id {
+                old_ui: any = n["ui"] if n["ui"] else {};
+                new_ui: dict = {
+                    "position": {"x": x, "y": y},
+                    "width": old_ui["width"] if old_ui["width"] else 280,
+                    "height": old_ui["height"] if old_ui["height"] else 160,
+                    "collapsed": old_ui["collapsed"] if old_ui["collapsed"] else False
+                };
+                new_nodes = new_nodes + [{
+                    "node_id": n["node_id"],
+                    "node_name": n["node_name"],
+                    "type": n["type"],
+                    "enabled": n["enabled"],
+                    "fixed_role_description": n["fixed_role_description"],
+                    "expected_input_schema": n["expected_input_schema"],
+                    "expected_output_schema": n["expected_output_schema"],
+                    "prompt_config": n["prompt_config"],
+                    "model_config": n["model_config"],
+                    "skill_bindings": n["skill_bindings"],
+                    "tool_bindings": n["tool_bindings"],
+                    "runtime_config": n["runtime_config"],
+                    "type_config": n["type_config"],
+                    "ui": new_ui
+                }];
+            } else {
+                new_nodes = new_nodes + [n];
+            }
+        }
+        replace_workflow(rebuild_workflow(base, new_nodes, base["edges"] as list));
+    }
+
+    def add_node(kind: str) {
+        base: dict = current_workflow();
+        if kind == "Trigger" and count_kind(base, "Trigger") >= 1 {
+            append_log("error", "[grammar] only one Trigger allowed");
+            return;
+        }
+        if kind == "Aggregator" and count_kind(base, "Aggregator") >= 1 {
+            append_log("error", "[grammar] only one Aggregator allowed");
+            return;
+        }
+        id_counter = id_counter + 1;
+        nid = "n_" + kind.lower() + "_" + str(id_counter);
+        x = 80.0 + float(id_counter) * 24.0;
+        y = 80.0 + float(id_counter) * 28.0;
+        new_node = make_node(kind, nid, x, y);
+        new_nodes = (base["nodes"] as list) + [new_node];
+        replace_workflow(rebuild_workflow(base, new_nodes, base["edges"] as list));
+        append_log("info", "[canvas] added " + kind + " " + nid);
+        selected_node_id = nid;
+    }
+
+    def on_connect(src: str, tgt: str) {
+        base: dict = current_workflow();
+        sk = kind_of(base, src);
+        tk = kind_of(base, tgt);
+        if not edge_allowed(sk, tk) {
+            append_log("error", "[grammar] illegal edge " + sk + " → " + tk);
+            return;
+        }
+        for e in (base["edges"] as list) {
+            if str(e["source_node_id"]) == src and str(e["target_node_id"]) == tgt {
+                append_log("info", "[canvas] edge already exists");
+                return;
+            }
+        }
+        id_counter = id_counter + 1;
+        eid = "e_" + str(id_counter);
+        cond_type = "ALWAYS";
+        route_val: any = None;
+        label: any = None;
+        if sk == "Router" {
+            cond_type = "ROUTE_VALUE";
+            route_val = "route_" + str(id_counter);
+            label = route_val;
+        } elif sk == "WorkerAgent" and tk == "Aggregator" {
+            cond_type = "ON_SUCCESS";
+        }
+        new_edge: dict = {
+            "edge_id": eid,
+            "source_node_id": src,
+            "target_node_id": tgt,
+            "condition": {"type": cond_type, "expression": None, "route_value": route_val},
+            "data_mapping": {"source": "$", "target": "$"},
+            "ui": {"label": label}
+        };
+        new_edges = (base["edges"] as list) + [new_edge];
+        replace_workflow(rebuild_workflow(base, base["nodes"] as list, new_edges));
+        append_log("info", "[canvas] connected " + src + " → " + tgt);
+    }
+
+    def on_delete_edge(edge_id: str) {
+        base: dict = current_workflow();
+        new_edges: list = [];
+        for e in (base["edges"] as list) {
+            if str(e["edge_id"]) != edge_id {
+                new_edges = new_edges + [e];
+            }
+        }
+        replace_workflow(rebuild_workflow(base, base["nodes"] as list, new_edges));
+        append_log("info", "[canvas] deleted edge " + edge_id);
+    }
+
+    def on_delete_node(node_id: str) {
+        base: dict = current_workflow();
+        new_nodes: list = [];
+        for n in (base["nodes"] as list) {
+            if str(n["node_id"]) != node_id {
+                new_nodes = new_nodes + [n];
+            }
+        }
+        new_edges: list = [];
+        for e in (base["edges"] as list) {
+            if str(e["source_node_id"]) != node_id and str(e["target_node_id"]) != node_id {
+                new_edges = new_edges + [e];
+            }
+        }
+        replace_workflow(rebuild_workflow(base, new_nodes, new_edges));
+        if selected_node_id == node_id {
+            selected_node_id = "";
+        }
+        append_log("info", "[canvas] deleted node " + node_id);
+    }
+
+    def set_running(value: bool) {
+        running = value;
+        if not value {
+            train_control["active"] = False;
+        }
+    }
+
+    def set_last_output(value: str) {
+        last_output = value;
+    }
+
+    def apply_updated_nodes(updated: list) {
+        if not updated {
+            return;
+        }
+        updates: dict = {};
+        for u in updated {
+            updates[u["node_id"]] = u["prompt_config"];
+        }
+        base: dict = current_workflow();
+        new_nodes: list = [];
+        for n in (base["nodes"] as list) {
+            if n["node_id"] in updates {
+                new_nodes = new_nodes + [{
+                    "node_id": n["node_id"],
+                    "node_name": n["node_name"],
+                    "type": n["type"],
+                    "enabled": n["enabled"],
+                    "fixed_role_description": n["fixed_role_description"],
+                    "expected_input_schema": n["expected_input_schema"],
+                    "expected_output_schema": n["expected_output_schema"],
+                    "prompt_config": updates[n["node_id"]],
+                    "model_config": n["model_config"],
+                    "skill_bindings": n["skill_bindings"],
+                    "tool_bindings": n["tool_bindings"],
+                    "runtime_config": n["runtime_config"],
+                    "type_config": n["type_config"],
+                    "ui": n["ui"]
+                }];
+            } else {
+                new_nodes = new_nodes + [n];
+            }
+        }
+        replace_workflow(rebuild_workflow(base, new_nodes, base["edges"] as list));
+    }
+
+    def request_stop() {
+        train_control["active"] = False;
+        running = False;
+        append_logs([{"kind": "info", "text": "[stop] training interrupted"}]);
+    }
+
+    async def refresh_library() {
+        try {
+            res: dict = await list_workflows();
+            items: list = res["items"] as list if res["items"] else [];
+            library = items;
+        } except Exception as err {
+            append_log("error", "[library] list failed: " + str(err));
+        }
+    }
+
+    async can with entry {
+        v = validate_flow(DEMO_WORKFLOW);
+        grammar_errors = v["errors"] as list if v["errors"] else [];
+        try {
+            res: dict = await list_workflows();
+            items: list = res["items"] as list if res["items"] else [];
+            if len(items) == 0 {
+                seeded = await save_workflow(DEMO_WORKFLOW);
+                if seeded["ok"] {
+                    append_log("info", "[library] seeded demo workflow");
+                    res2: dict = await list_workflows();
+                    items = res2["items"] as list if res2["items"] else [];
+                }
+            }
+            library = items;
+            append_log("info", "[library] loaded " + str(len(items)) + " workflow(s)");
+        } except Exception as err {
+            append_log("error", "[library] seed/list failed: " + str(err));
+        }
+    }
+
+    async def on_save(_e: MouseEvent) {
+        wf = current_workflow();
+        v = validate_flow(wf);
+        if not v["ok"] {
+            append_log("error", "[grammar] cannot save: " + str(v["errors"]));
+            grammar_errors = v["errors"] as list;
+            return;
+        }
+        try {
+            res = await save_workflow(wf);
+            if res["ok"] {
+                saved_id = str(res["workflow_id"]);
+                append_log("info", "[library] saved " + saved_id);
+                load_select = saved_id;
+                await refresh_library();
+            } else {
+                append_log("error", "[library] save rejected: " + str(res["errors"]));
+            }
+        } except Exception as err {
+            append_log("error", "[library] " + str(err));
+        }
+    }
+
+    async def on_load(workflow_id: str) {
+        if workflow_id == "" {
+            return;
+        }
+        try {
+            res = await get_workflow(workflow_id);
+            if res and res["body"] {
+                replace_workflow(res["body"] as dict);
+                selected_node_id = "";
+                load_select = workflow_id;
+                append_log("info", "[library] loaded " + workflow_id);
+            } else {
+                append_log("error", "[library] not found: " + workflow_id);
+                load_select = "";
+                await refresh_library();
+            }
+        } except Exception as err {
+            append_log("error", "[library] " + str(err));
+            load_select = "";
+        }
+    }
+
+    async def on_delete_workflow(_e: MouseEvent) {
+        wid = str(current_workflow()["workflow_id"]);
+        in_lib: bool = False;
+        for item in library {
+            if str((item as dict)["workflow_id"]) == wid {
+                in_lib = True;
+            }
+        }
+        if not in_lib {
+            append_log("info", "[library] discarded unsaved draft " + wid);
+            id_counter = id_counter + 1;
+            replace_workflow(blank_workflow("wf_draft_" + str(id_counter), "Untitled"));
+            selected_node_id = "";
+            load_select = "";
+            return;
+        }
+        try {
+            res = await delete_workflow(wid);
+            if res["ok"] {
+                append_log("info", "[library] deleted " + wid);
+                id_counter = id_counter + 1;
+                replace_workflow(blank_workflow("wf_draft_" + str(id_counter), "Untitled"));
+                selected_node_id = "";
+                load_select = "";
+                await refresh_library();
+            } else {
+                append_log("error", "[library] " + str(res["errors"]));
+            }
+        } except Exception as err {
+            append_log("error", "[library] " + str(err));
+        }
+    }
+
+    def on_new(_e: MouseEvent) {
+        id_counter = id_counter + 1;
+        next_id = "wf_custom_" + str(id_counter);
+        replace_workflow(blank_workflow(next_id, "Untitled " + str(id_counter)));
+        selected_node_id = "";
+        load_select = "";
+        append_log("info", "[library] new blank canvas " + next_id);
+    }
+
+    def add_trigger(_e: MouseEvent) { add_node("Trigger"); }
+    def add_router(_e: MouseEvent) { add_node("Router"); }
+    def add_agent(_e: MouseEvent) { add_node("WorkerAgent"); }
+    def add_aggregator(_e: MouseEvent) { add_node("Aggregator"); }
+
+    async def on_load_change(e: ChangeEvent) {
+        wid = str(e.target.value);
+        if wid != "" {
+            await on_load(wid);
+        }
+    }
+
+    btn: dict = {
+        "padding": "6px 10px",
+        "borderRadius": "6px",
+        "border": "1px solid #334155",
+        "background": "#1e293b",
+        "color": "#e2e8f0",
+        "cursor": "pointer",
+        "fontSize": "12px",
+        "fontWeight": "600"
+    };
+
+    return <div style={{
+        "display": "flex",
+        "height": "100vh",
+        "width": "100vw",
+        "overflow": "hidden",
+        "background": "#020617",
+        "fontFamily": "system-ui, sans-serif"
+    }}>
+        <div style={{"flex": "1", "display": "flex", "flexDirection": "column", "minWidth": "0"}}>
+            <header style={{
+                "padding": "10px 16px",
+                "borderBottom": "1px solid #1e293b",
+                "color": "#f8fafc",
+                "display": "flex",
+                "flexDirection": "column",
+                "gap": "8px"
+            }}>
+                <div style={{"display": "flex", "alignItems": "baseline", "gap": "12px"}}>
+                    <span style={{"fontWeight": "800", "letterSpacing": "0.04em"}}>RAL</span>
+                    <span style={{"fontSize": "13px", "color": "#94a3b8"}}>
+                        {str(workflow["workflow_name"]) if workflow["workflow_name"] else "Workflow"}
+                    </span>
+                </div>
+                <div style={{"display": "flex", "flexWrap": "wrap", "gap": "8px", "alignItems": "center"}}>
+                    <button type="button" style={btn} onClick={on_new}>New</button>
+                    <button type="button" style={btn} onClick={on_save}>Save</button>
+                    <button type="button" style={btn} onClick={on_delete_workflow}>Delete</button>
+                    <select
+                        value={load_select}
+                        onChange={on_load_change}
+                        style={{
+                            "background": "#020617",
+                            "color": "#e2e8f0",
+                            "border": "1px solid #334155",
+                            "borderRadius": "6px",
+                            "padding": "6px 8px",
+                            "fontSize": "12px"
+                        }}
+                    >
+                        <option value="">Load…</option>
+                        {for item in library {
+                            <option
+                                key={str((item as dict)["workflow_id"])}
+                                value={str((item as dict)["workflow_id"])}
+                            >{str((item as dict)["name"])}</option>
+                        }}
+                    </select>
+                    <span style={{"color": "#475569", "margin": "0 4px"}}>|</span>
+                    <button type="button" style={btn} onClick={add_trigger}>+ Trigger</button>
+                    <button type="button" style={btn} onClick={add_router}>+ Router</button>
+                    <button type="button" style={btn} onClick={add_agent}>+ Agent</button>
+                    <button type="button" style={btn} onClick={add_aggregator}>+ Aggregator</button>
+                </div>
+                {if len(grammar_errors) > 0 {
+                    <div style={{"fontSize": "12px", "color": "#fbbf24"}}>
+                        {"Flow incomplete/invalid: " + str(grammar_errors)}
+                    </div>
+                }}
+            </header>
+            <FlowCanvas
+                workflow={workflow}
+                on_select_node={on_select_node}
+                on_nodes_change={on_nodes_change}
+                on_connect={on_connect}
+                on_delete_edge={on_delete_edge}
+                on_delete_node={on_delete_node}
+            />
+        </div>
+        <TrainingConsole
+            workflow={workflow}
+            dataset={DEMO_DATASET}
+            logs={logs}
+            running={running}
+            last_output={last_output}
+            train_control={train_control}
+            append_logs={append_logs}
+            apply_updated_nodes={apply_updated_nodes}
+            get_workflow={current_workflow}
+            set_running={set_running}
+            set_last_output={set_last_output}
+            request_stop={request_stop}
+        />
+        {if selected_node_id != "" {
+            <NodeInspector
+                workflow={workflow}
+                node_id={selected_node_id}
+                on_update_prompt={on_update_prompt}
+                on_delete_node={on_delete_node}
+                on_close={on_close_inspector}
+            />
+        }}
+    </div>;
+}

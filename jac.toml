@@ -13,6 +13,7 @@ react-router-dom = "^6.22.0"
 react-error-boundary = "^5.0.0"
 "@tanstack/react-form" = "^1.33.0"
 zod = "^4.3.6"
+"@xyflow/react" = "latest"
 
 [dependencies.npm.dev]
 vite = "^6.4.1"
@@ -28,5 +29,12 @@ watchdog = ">=3.0.0"
 
 [serve]
 base_route_app = "app"
+
+# Client sv import auto-spawns endpoints as a microservice; LLM/RL steps need headroom.
+[scale.microservices.services.endpoints]
+rpc_timeout = 120.0
+
+[byllm.model]
+default_model = "gemini/gemini-2.0-flash"
 
 [client]
