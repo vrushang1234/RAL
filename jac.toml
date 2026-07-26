@@ -35,6 +35,6 @@ base_route_app = "app"
 rpc_timeout = 120.0
 
 [byllm.model]
-default_model = "gemini/gemini-2.0-flash"
+default_model = "gemini/gemini-2.5-flash"
 
 [client]

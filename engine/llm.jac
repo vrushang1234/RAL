@@ -3,7 +3,7 @@
 import from jaclang.byllm.lib { Model }
 import os;
 
-glob llm: Model = Model(model_name="gemini/gemini-2.0-flash");
+glob llm: Model = Model(model_name="gemini/gemini-2.5-flash");
 
 obj RouteChoice {
     has route: str;

@@ -70,7 +70,7 @@ def:pub make_node(kind: str, node_id: str, x: float, y: float) -> dict {
         "prompt_config": pc,
         "model_config": {
             "provider": "google",
-            "model": "gemini-2.0-flash",
+            "model": "gemini-2.5-flash",
             "temperature": 0.2,
             "top_p": 1,
             "max_output_tokens": 1500,

@@ -1,5 +1,7 @@
 .jac/
 node_modules/
+package.json
+bun.lock
 .vscode/
 .idea/
 .env
