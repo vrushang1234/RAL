@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkflowExecutionPayload",
+  "type": "object",
+  "required": ["workflow_run_id", "task_context", "agent_states", "execution_trace"],
+  "properties": {
+    "workflow_run_id": { "type": "string" },
+    "task_context": {
+      "type": "object",
+      "required": ["initial_input", "expected_ground_truth", "actual_final_output"],
+      "properties": {
+        "initial_input": { "type": "string" },
+        "expected_ground_truth": { "type": "string" },
+        "actual_final_output": { "type": "string" }
+      }
+    },
+    "agent_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "node_id",
+          "agent_name",
+          "type",
+          "fixed_role_description",
+          "expected_input",
+          "expected_output",
+          "current_sem_prompt"
+        ],
+        "properties": {
+          "node_id": { "type": "string" },
+          "agent_name": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["Trigger", "Router", "WorkerAgent", "Aggregator"]
+          },
+          "fixed_role_description": { "type": "string" },
+          "expected_input": { "type": "string" },
+          "expected_output": { "type": "string" },
+          "current_sem_prompt": { "type": "string" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "target": { "type": "string" }
+        }
+      }
+    },
+    "execution_trace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "node_id", "status"],
+        "properties": {
+          "step": { "type": "integer" },
+          "node_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["EXECUTED", "SKIPPED", "FAILED"]
+          },
+          "input_received": { "type": "string" },
+          "output_generated": { "type": "string" },
+          "error_message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

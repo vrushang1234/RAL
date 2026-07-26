@@ -1,0 +1,474 @@
+{
+  "schema_version": "1.0.0",
+  "workflow_id": "<workflow-id>",
+  "workflow_name": "<workflow-name>",
+  "workflow_version": 1,
+  "configuration_hash": null,
+  "status": "DRAFT",
+  "description": "<workflow-description>",
+
+  "entry_node_id": "<entry-node-id>",
+  "output_node_id": "<output-node-id>",
+
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "input": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "input"
+    ]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "output": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "output"
+    ]
+  },
+
+  "global_config": {
+    "max_workflow_runtime_ms": 120000,
+    "max_parallel_nodes": 4,
+    "fail_fast": true,
+
+    "context_config": {
+      "mode": "SELECTIVE",
+      "max_context_tokens": 16000,
+      "include_upstream_outputs": true,
+      "include_tool_outputs": true,
+      "include_execution_history": false,
+      "shared_memory_enabled": false
+    },
+
+    "observability_config": {
+      "store_node_inputs": true,
+      "store_node_outputs": true,
+      "store_tool_inputs": true,
+      "store_tool_outputs": true,
+      "store_token_usage": true,
+      "store_latency_metrics": true
+    }
+  },
+
+  "tool_catalog": [
+    {
+      "tool_id": "<tool-id>",
+      "tool_name": "<tool-name>",
+      "description": "<tool-description>",
+      "tool_type": "BUILTIN",
+      "credential_ref": null,
+
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "config": {}
+    }
+  ],
+
+  "skill_catalog": [
+    {
+      "skill_id": "<skill-id>",
+      "skill_name": "<skill-name>",
+      "description": "<skill-description>",
+      "instructions": "<skill-specific-instructions>",
+
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  ],
+
+  "nodes": [
+    {
+      "node_id": "<trigger-node-id>",
+      "node_name": "<trigger-node-name>",
+      "type": "Trigger",
+      "enabled": true,
+
+      "fixed_role_description": "<fixed-trigger-description>",
+
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "prompt_config": null,
+      "model_config": null,
+
+      "skill_bindings": [],
+      "tool_bindings": [],
+
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 0,
+        "retry_backoff_ms": 0,
+        "continue_on_failure": false
+      },
+
+      "type_config": {
+        "trigger": {
+          "trigger_type": "MANUAL",
+          "config": {}
+        },
+        "router": null,
+        "worker": null,
+        "aggregator": null
+      },
+
+      "ui": {
+        "position": {
+          "x": 100,
+          "y": 200
+        },
+        "width": 280,
+        "height": 160,
+        "collapsed": false
+      }
+    },
+
+    {
+      "node_id": "<router-node-id>",
+      "node_name": "<router-node-name>",
+      "type": "Router",
+      "enabled": true,
+
+      "fixed_role_description": "<fixed-router-description>",
+
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+
+      "prompt_config": {
+        "prompt_id": "<router-prompt-id>",
+        "prompt_version": 1,
+        "system_prompt": "<router-system-prompt>",
+        "user_prompt_template": "{{workflow_input}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "workflow_input"
+        ]
+      },
+
+      "model_config": {
+        "provider": "<model-provider>",
+        "model": "<model-name>",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+
+      "skill_bindings": [],
+
+      "tool_bindings": [],
+
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+
+      "ui": {
+        "position": {
+          "x": 450,
+          "y": 200
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+
+    {
+      "node_id": "<worker-node-id>",
+      "node_name": "<worker-agent-name>",
+      "type": "WorkerAgent",
+      "enabled": true,
+
+      "fixed_role_description": "<fixed-worker-role-description>",
+
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "prompt_config": {
+        "prompt_id": "<worker-prompt-id>",
+        "prompt_version": 1,
+        "system_prompt": "<worker-system-prompt>",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "<worker-output-instructions>",
+        "variables": [
+          "node_input"
+        ]
+      },
+
+      "model_config": {
+        "provider": "<model-provider>",
+        "model": "<model-name>",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+
+      "skill_bindings": [
+        {
+          "skill_id": "<skill-id>",
+          "enabled": true,
+          "config_overrides": {}
+        }
+      ],
+
+      "tool_bindings": [
+        {
+          "tool_id": "<tool-id>",
+          "enabled": true,
+          "config_overrides": {}
+        }
+      ],
+
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+
+      "ui": {
+        "position": {
+          "x": 800,
+          "y": 100
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+
+    {
+      "node_id": "<aggregator-node-id>",
+      "node_name": "<aggregator-node-name>",
+      "type": "Aggregator",
+      "enabled": true,
+
+      "fixed_role_description": "<fixed-aggregator-description>",
+
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+
+      "prompt_config": {
+        "prompt_id": "<aggregator-prompt-id>",
+        "prompt_version": 1,
+        "system_prompt": "<aggregator-system-prompt>",
+        "user_prompt_template": "{{upstream_outputs}}",
+        "output_instructions": "Produce the final workflow output.",
+        "variables": [
+          "upstream_outputs"
+        ]
+      },
+
+      "model_config": {
+        "provider": "<model-provider>",
+        "model": "<model-name>",
+        "temperature": 0.1,
+        "top_p": 1,
+        "max_output_tokens": 1200,
+        "seed": null
+      },
+
+      "skill_bindings": [],
+
+      "tool_bindings": [],
+
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": null,
+        "aggregator": {
+          "strategy": "SUMMARIZE",
+          "required_upstream_node_ids": [
+            "<worker-node-id>"
+          ],
+          "custom_instructions": null
+        }
+      },
+
+      "ui": {
+        "position": {
+          "x": 1200,
+          "y": 200
+        },
+        "width": 300,
+        "height": 220,
+        "collapsed": false
+      }
+    }
+  ],
+
+  "edges": [
+    {
+      "edge_id": "<edge-1-id>",
+      "source_node_id": "<trigger-node-id>",
+      "target_node_id": "<router-node-id>",
+
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+
+      "data_mapping": {
+        "source": "$.input",
+        "target": "$.workflow_input"
+      },
+
+      "ui": {
+        "label": null
+      }
+    },
+
+    {
+      "edge_id": "<edge-2-id>",
+      "source_node_id": "<router-node-id>",
+      "target_node_id": "<worker-node-id>",
+
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "<route-name>"
+      },
+
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+
+      "ui": {
+        "label": "<route-label>"
+      }
+    },
+
+    {
+      "edge_id": "<edge-3-id>",
+      "source_node_id": "<worker-node-id>",
+      "target_node_id": "<aggregator-node-id>",
+
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.<worker-node-id>"
+      },
+
+      "ui": {
+        "label": null
+      }
+    }
+  ],
+
+  "metadata": {
+    "created_at": "<ISO-8601-timestamp>",
+    "updated_at": "<ISO-8601-timestamp>",
+    "created_by": "<user-id>",
+    "tags": []
+  }
+}

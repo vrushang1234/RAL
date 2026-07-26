@@ -1,0 +1,459 @@
+{
+  "schema_version": "1.0.0",
+  "workflow_id": "wf_demo_triage",
+  "workflow_name": "Support Email Triage",
+  "workflow_version": 1,
+  "configuration_hash": null,
+  "status": "DRAFT",
+  "description": "Route inbound support email to billing or technical, then aggregate a reply.",
+  "entry_node_id": "trigger_1",
+  "output_node_id": "aggregator_1",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "input": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "input"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "output": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "output"
+    ]
+  },
+  "global_config": {
+    "max_workflow_runtime_ms": 120000,
+    "max_parallel_nodes": 4,
+    "fail_fast": true,
+    "context_config": {
+      "mode": "SELECTIVE",
+      "max_context_tokens": 16000,
+      "include_upstream_outputs": true,
+      "include_tool_outputs": true,
+      "include_execution_history": false,
+      "shared_memory_enabled": false
+    },
+    "observability_config": {
+      "store_node_inputs": true,
+      "store_node_outputs": true,
+      "store_tool_inputs": true,
+      "store_tool_outputs": true,
+      "store_token_usage": true,
+      "store_latency_metrics": true
+    }
+  },
+  "tool_catalog": [],
+  "skill_catalog": [],
+  "nodes": [
+    {
+      "node_id": "trigger_1",
+      "node_name": "Inbound Email",
+      "type": "Trigger",
+      "enabled": true,
+      "fixed_role_description": "Accepts the raw support email as workflow input.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": null,
+      "model_config": null,
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 0,
+        "retry_backoff_ms": 0,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": {
+          "trigger_type": "MANUAL",
+          "config": {}
+        },
+        "router": null,
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 60,
+          "y": 220
+        },
+        "width": 280,
+        "height": 160,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "router_1",
+      "node_name": "Triage Router",
+      "type": "Router",
+      "enabled": true,
+      "fixed_role_description": "You classify inbound support emails.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_router",
+        "prompt_version": 1,
+        "system_prompt": "Decide if this email is about billing or technical issues.",
+        "user_prompt_template": "{{workflow_input}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "workflow_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 340,
+          "y": 220
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_billing",
+      "node_name": "Billing Agent",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a billing support specialist.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_billing",
+        "prompt_version": 1,
+        "system_prompt": "Reply.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the customer reply.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 640,
+          "y": 100
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_technical",
+      "node_name": "Technical Agent",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a technical support engineer.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_technical",
+        "prompt_version": 1,
+        "system_prompt": "Answer.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the customer reply.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 640,
+          "y": 340
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "aggregator_1",
+      "node_name": "Final Reply",
+      "type": "Aggregator",
+      "enabled": true,
+      "fixed_role_description": "You produce the final customer-ready reply.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_aggregator",
+        "prompt_version": 1,
+        "system_prompt": "Combine.",
+        "user_prompt_template": "{{upstream_outputs}}",
+        "output_instructions": "Produce the final workflow output.",
+        "variables": [
+          "upstream_outputs"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "temperature": 0.1,
+        "top_p": 1,
+        "max_output_tokens": 1200,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": null,
+        "aggregator": {
+          "strategy": "SUMMARIZE",
+          "required_upstream_node_ids": [
+            "worker_billing",
+            "worker_technical"
+          ],
+          "custom_instructions": null
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 940,
+          "y": 220
+        },
+        "width": 300,
+        "height": 220,
+        "collapsed": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e1",
+      "source_node_id": "trigger_1",
+      "target_node_id": "router_1",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$.input",
+        "target": "$.workflow_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "e2",
+      "source_node_id": "router_1",
+      "target_node_id": "worker_billing",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "billing"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "billing"
+      }
+    },
+    {
+      "edge_id": "e3",
+      "source_node_id": "router_1",
+      "target_node_id": "worker_technical",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "technical"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "technical"
+      }
+    },
+    {
+      "edge_id": "e4a",
+      "source_node_id": "worker_billing",
+      "target_node_id": "aggregator_1",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_billing"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "e4b",
+      "source_node_id": "worker_technical",
+      "target_node_id": "aggregator_1",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_technical"
+      },
+      "ui": {
+        "label": null
+      }
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-07-26T00:00:00Z",
+    "updated_at": "2026-07-26T00:00:00Z",
+    "created_by": "demo",
+    "tags": [
+      "demo",
+      "triage"
+    ]
+  }
+}
