@@ -7,7 +7,9 @@ number that went up as evidence of improvement.
 
 import from rl.bridge {
     OptimizerMemory, workflow_signature, overlap_score, read_trace,
-    critic_score, propose_mutations, optimize_with_memory, scores_for
+    critic_score, propose_mutations, optimize_with_memory, scores_for,
+    split_managed, parse_directives, compose_prompt,
+    MANAGED_HEADER, ROBUSTNESS_TEXT, FORMAT_TEXT, COVERAGE_PREFIX, MAX_COVERAGE_TERMS
 }
 
 
@@ -113,54 +115,129 @@ test "execution failures discount the critic score" {
 test "a failing node gets a targeted robustness edit" {
     states = [state("w1", "WorkerAgent", "Answer the question.")];
     facts = read_trace([step("w1", "FAILED", "", "bad input")]);
-    muts = propose_mutations(states, facts, "", "expected answer");
+    muts = propose_mutations(states, facts, "", "expected answer", fresh_memory());
     assert len(muts) == 1;
     first = muts[0] as dict;
     assert str(first["node_id"]) == "w1";
-    assert "missing" in str(first["new_sem_prompt"]);
+    assert ROBUSTNESS_TEXT in str(first["new_sem_prompt"]);
+    assert str(first["new_sem_prompt"]).startswith("Answer the question."),
+        "the author's text must survive untouched";
 }
 
 
 test "a silent node gets an output-shape edit" {
     states = [state("w1", "WorkerAgent", "Answer the question.")];
     facts = read_trace([step("w1", "SUCCESS", "", "")]);
-    muts = propose_mutations(states, facts, "", "expected answer");
+    muts = propose_mutations(states, facts, "", "expected answer", fresh_memory());
     assert len(muts) == 1;
-    first = muts[0] as dict;
-    assert "non-empty" in str(first["new_sem_prompt"]);
+    assert FORMAT_TEXT in str((muts[0] as dict)["new_sem_prompt"]);
 }
 
 
-test "the same sentence is never appended twice" {
-    # The node already carries the robustness edit and still fails. Falling
-    # through to a DIFFERENT instruction is fine; re-appending the same
-    # sentence is what a mock does to manufacture a climbing score.
-    sentence = "If an input is missing or malformed, state what is missing instead of guessing.";
-    states = [state("w1", "WorkerAgent", "Answer the question. " + sentence)];
+test "the managed block round-trips" {
+    base = "Reply to the customer.";
+    directives: dict[str, str] = {"robustness": ROBUSTNESS_TEXT, "format": FORMAT_TEXT};
+    composed = compose_prompt(base, directives);
+    parts = split_managed(composed);
+    assert parts[0] == base, f"base drifted: {parts[0]}";
+    recovered = parse_directives(parts[1]);
+    assert recovered["robustness"] == ROBUSTNESS_TEXT;
+    assert recovered["format"] == FORMAT_TEXT;
+}
+
+
+test "a prompt with no managed block is all base" {
+    parts = split_managed("Just the author's text.");
+    assert parts[0] == "Just the author's text.";
+    assert parts[1] == "";
+}
+
+
+test "repeating the same situation proposes nothing the second time" {
+    memory = fresh_memory();
+    states = [state("w1", "WorkerAgent", "Answer the question.")];
     facts = read_trace([step("w1", "FAILED", "", "bad input")]);
 
-    for raw in propose_mutations(states, facts, "", "expected answer") {
-        m = raw as dict;
-        revised = str(m["new_sem_prompt"]);
-        assert revised.count(sentence) <= 1, f"duplicated instruction: {revised}";
+    first = propose_mutations(states, facts, "", "expected answer", memory);
+    assert len(first) == 1;
+
+    # Feed the revised prompt back in, exactly as the engine does.
+    revised = str((first[0] as dict)["new_sem_prompt"]);
+    again = propose_mutations(
+        [state("w1", "WorkerAgent", revised)], facts, "", "expected answer", memory
+    );
+    assert again == [], f"idempotence broken: {again}";
+}
+
+
+test "the prompt stays bounded across many rounds on different tasks" {
+    # THE regression test. Previously each task appended its own sentence, so
+    # prompts grew without bound and repeated the same instruction shape.
+    memory = fresh_memory();
+    prompt = "Reply.";
+    tasks = [
+        "apologetic business confirming days number",
+        "apologetic reference refunded reply within",
+        "apologetic number reply will with",
+        "acknowledging asking crash fix interim",
+        "escalate priority ticket urgent within"
+    ];
+
+    for expected in tasks {
+        states = [state("w1", "WorkerAgent", prompt)];
+        facts = read_trace([step("w1", "SUCCESS", "something unrelated", "")]);
+        muts = propose_mutations(states, facts, "something unrelated", expected, memory);
+        if len(muts) > 0 {
+            prompt = str((muts[0] as dict)["new_sem_prompt"]);
+        }
     }
+
+    assert prompt.count(COVERAGE_PREFIX) == 1,
+        f"coverage guidance must appear exactly once, got:\n{prompt}";
+    assert prompt.count(MANAGED_HEADER) == 1, f"one managed block only:\n{prompt}";
+    assert prompt.startswith("Reply."), "the author's text must survive";
+
+    parts = split_managed(prompt);
+    directives = parse_directives(parts[1]);
+    terms = directives["coverage"].replace(COVERAGE_PREFIX, "").strip().rstrip(".").split(", ");
+    assert len(terms) <= MAX_COVERAGE_TERMS, f"term list must stay capped, got {len(terms)}";
+}
+
+
+test "coverage guidance converges and then stops mutating" {
+    memory = fresh_memory();
+    prompt = "Reply.";
+    facts = read_trace([step("w1", "SUCCESS", "unrelated", "")]);
+
+    # Same task twice: the second pass has nothing new to add.
+    first = propose_mutations(
+        [state("w1", "WorkerAgent", prompt)], facts, "unrelated", "alpha beta gamma", memory
+    );
+    assert len(first) == 1;
+    prompt = str((first[0] as dict)["new_sem_prompt"]);
+
+    second = propose_mutations(
+        [state("w1", "WorkerAgent", prompt)], facts, "unrelated", "alpha beta gamma", memory
+    );
+    assert second == [], "a converged term set must stop producing mutations";
 }
 
 
 test "a fully-covered failing node stops proposing" {
-    # Robustness edit already applied AND the answer covers everything expected:
-    # there is no evidence left to act on, so nothing should be proposed.
-    sentence = "If an input is missing or malformed, state what is missing instead of guessing.";
-    states = [state("w1", "WorkerAgent", "Answer. " + sentence)];
+    states = [state("w1", "WorkerAgent", compose_prompt("Answer.", {"robustness": ROBUSTNESS_TEXT}))];
     facts = read_trace([step("w1", "FAILED", "", "bad input")]);
-    assert propose_mutations(states, facts, "refund duplicate charge", "refund duplicate charge") == [];
+    assert propose_mutations(
+        states, facts, "refund duplicate charge", "refund duplicate charge", fresh_memory()
+    ) == [];
 }
 
 
 test "a healthy trace with a covered answer proposes nothing" {
     states = [state("w1", "WorkerAgent", "Answer.")];
     facts = read_trace([step("w1", "SUCCESS", "refund duplicate charge", "")]);
-    muts = propose_mutations(states, facts, "refund duplicate charge", "refund duplicate charge");
+    muts = propose_mutations(
+        states, facts, "refund duplicate charge", "refund duplicate charge", fresh_memory()
+    );
     assert muts == [], "no evidence of a problem means no mutation";
 }
 
@@ -182,12 +259,13 @@ test "grounding edits target the executed worker, not the first WorkerAgent" {
         states,
         facts,
         "please reboot",
-        "Reply acknowledging the crash, asking for the app version and suggesting reinstall"
+        "Reply acknowledging the crash, asking for the app version and suggesting reinstall",
+        fresh_memory()
     );
     assert len(muts) == 1, f"expected one mutation, got {muts}";
     first = muts[0] as dict;
     assert str(first["node_id"]) == "worker_technical", f"got {first}";
-    assert "Make sure the answer addresses:" in str(first["new_sem_prompt"]);
+    assert COVERAGE_PREFIX in str(first["new_sem_prompt"]);
 }
 
 
