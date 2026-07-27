@@ -120,6 +120,7 @@ obj TraceFacts {
     has empty_outputs: int = 0;
     has failing_nodes: list[str] = [];
     has silent_nodes: list[str] = [];
+    has executed_nodes: list[str] = [];
 }
 
 
@@ -137,6 +138,9 @@ def read_trace(execution_trace: list) -> TraceFacts {
             continue;
         }
         facts.steps += 1;
+        if node_id != "" and not (node_id in facts.executed_nodes) {
+            facts.executed_nodes.append(node_id);
+        }
         if error != "" {
             facts.errors += 1;
             if not (node_id in facts.failing_nodes) {
@@ -254,6 +258,21 @@ def worker_states(agent_states: list) -> list {
 }
 
 
+"""Workers that actually ran this trace — never the SKIPPED twin on a fan-out."""
+def executed_worker_states(agent_states: list, facts: TraceFacts) -> list {
+    out: list = [];
+    for raw in agent_states {
+        state = raw as dict;
+        kind = str(state["type"]) if "type" in state else "";
+        nid = str(state["node_id"]) if "node_id" in state else "";
+        if kind == "WorkerAgent" and nid in facts.executed_nodes {
+            out.append(state);
+        }
+    }
+    return out;
+}
+
+
 def state_for(agent_states: list, node_id: str) -> dict {
     for raw in agent_states {
         state = raw as dict;
@@ -270,64 +289,174 @@ def prompt_of(state: dict) -> str {
 }
 
 
+glob MANAGED_HEADER: str = "Guidelines:";
+glob ROBUSTNESS_TEXT: str = "If an input is missing or malformed, say what is missing instead of guessing.";
+glob FORMAT_TEXT: str = "Always produce a non-empty answer in the requested output format.";
+glob COVERAGE_PREFIX: str = "Cover these points when they apply:";
+glob MAX_COVERAGE_TERMS: int = 8;
+
+
+"""Per-node memory of terms the answers keep missing.
+
+Coverage guidance is accumulated across calls instead of being rebuilt from the
+task in hand. Deriving it from a single task writes that task's vocabulary into
+a system prompt, which is memorizing the training example rather than improving
+the agent (section 15). Accumulating converges: once the term set stops moving,
+no further mutation is emitted.
+"""
+node NodeMemory {
+    has node_id: str;
+    has missed_terms: list[str] = [];
+}
+
+
+edge Tracks: OptimizerMemory --> NodeMemory {
+    has note: str = "";
+}
+
+
+def node_memory(memory: OptimizerMemory, node_id: str) -> NodeMemory {
+    for nm in [memory ->:Tracks:->] {
+        if nm.node_id == node_id {
+            return nm;
+        }
+    }
+    fresh = NodeMemory(node_id=node_id);
+    memory +>:Tracks:+> fresh;
+    return fresh;
+}
+
+
+"""Split a prompt into its author-owned base and the optimizer-managed block.
+
+Everything the optimizer writes lives in one delimited block that it REWRITES.
+Appending instead - which is what the previous version and `mock_rl.py` both
+did - makes prompts grow without bound and repeat the same instruction shape
+forever.
+"""
+def split_managed(prompt: str) -> list[str] {
+    marker = "\n\n" + MANAGED_HEADER;
+    idx = prompt.find(marker);
+    if idx < 0 {
+        return [prompt.rstrip(), ""];
+    }
+    return [prompt[:idx].rstrip(), prompt[idx + len(marker):].strip()];
+}
+
+
+"""Recover the directives already present, keyed by kind."""
+def parse_directives(block: str) -> dict[str, str] {
+    found: dict[str, str] = {};
+    for raw in block.split("\n") {
+        line = raw.strip();
+        if line.startswith("- ") {
+            text = line[2:].strip();
+            if text.startswith(COVERAGE_PREFIX) {
+                found["coverage"] = text;
+            } elif text == ROBUSTNESS_TEXT {
+                found["robustness"] = text;
+            } elif text == FORMAT_TEXT {
+                found["format"] = text;
+            }
+        }
+    }
+    return found;
+}
+
+
+"""Rebuild a prompt from its base plus a directive set, in a fixed order."""
+def compose_prompt(base: str, directives: dict[str, str]) -> str {
+    lines: list[str] = [];
+    for kind in ["robustness", "format", "coverage"] {
+        if kind in directives and directives[kind] != "" {
+            lines.append("- " + directives[kind]);
+        }
+    }
+    if len(lines) == 0 {
+        return base;
+    }
+    return base + "\n\n" + MANAGED_HEADER + "\n" + "\n".join(lines);
+}
+
+
+def coverage_directive(terms: list[str]) -> str {
+    if len(terms) == 0 {
+        return "";
+    }
+    return COVERAGE_PREFIX + " " + ", ".join(terms) + ".";
+}
+
+
 """Propose prompt edits from trace evidence (sections 10 and 12).
 
-Targeted, not boilerplate: a node that errored gets a robustness instruction, a
-node that produced nothing gets an output-shape instruction, and only when
-neither applies does an under-performing run get a grounding instruction aimed
-at the terms the expected output actually contains.
+Each node gets at most ONE mutation, and it rewrites the managed block rather
+than appending to the prompt. Three consequences that the previous version did
+not have:
 
-Each edit is applied at most once per node - re-appending the same sentence
-every round is how a mock produces a climbing score without changing behavior.
+  - the prompt is bounded - at most three directive lines, forever;
+  - the same instruction can never appear twice, because the block is rebuilt
+    from a keyed set rather than concatenated;
+  - re-running an unchanged situation emits nothing, because the recomposed
+    prompt is byte-identical to the current one.
 """
 def propose_mutations(
     agent_states: list,
     facts: TraceFacts,
     actual: str,
-    expected: str
+    expected: str,
+    memory: OptimizerMemory
 ) -> list {
-    mutations: list = [];
-    touched: list[str] = [];
+    wanted: dict[str, dict[str, str]] = {};
+
+    def want(node_id: str, kind: str, text: str) -> None {
+        if not (node_id in wanted) {
+            wanted[node_id] = {};
+        }
+        wanted[node_id][kind] = text;
+    }
 
     for node_id in facts.failing_nodes {
-        state = state_for(agent_states, node_id);
-        if len(state) > 0 {
-            prompt = prompt_of(state);
-            addition = "If an input is missing or malformed, state what is missing instead of guessing.";
-            if addition not in prompt {
-                mutations.append({"node_id": node_id, "new_sem_prompt": prompt + " " + addition});
-                touched.append(node_id);
-            }
+        if len(state_for(agent_states, node_id)) > 0 {
+            want(node_id, "robustness", ROBUSTNESS_TEXT);
         }
     }
-
     for node_id in facts.silent_nodes {
+        if len(state_for(agent_states, node_id)) > 0 {
+            want(node_id, "format", FORMAT_TEXT);
+        }
+    }
+
+    # Coverage accumulates per node across calls, capped and sorted so the set
+    # converges instead of churning with whatever task ran last.
+    missing = [t for t in set(normalize_tokens(expected)) if not (t in set(normalize_tokens(actual)))];
+    if len(missing) > 0 {
+        for raw in executed_worker_states(agent_states, facts) {
+            node_id = str((raw as dict)["node_id"]);
+            nm = node_memory(memory, node_id);
+            merged = sorted(set(nm.missed_terms + missing));
+            nm.missed_terms = merged[:MAX_COVERAGE_TERMS];
+            want(node_id, "coverage", coverage_directive(nm.missed_terms));
+        }
+    }
+
+    mutations: list = [];
+    for node_id in sorted(wanted.keys()) {
         state = state_for(agent_states, node_id);
-        if len(state) > 0 and not (node_id in touched) {
-            prompt = prompt_of(state);
-            addition = "Always produce a non-empty answer in the requested output format.";
-            if addition not in prompt {
-                mutations.append({"node_id": node_id, "new_sem_prompt": prompt + " " + addition});
-                touched.append(node_id);
-            }
+        if len(state) == 0 {
+            continue;
+        }
+        current = prompt_of(state);
+        parts = split_managed(current);
+        directives = parse_directives(parts[1]);
+        for kind in sorted(wanted[node_id].keys()) {
+            directives[kind] = wanted[node_id][kind];
+        }
+        revised = compose_prompt(parts[0], directives);
+        # Byte-identical means there is nothing to learn from this round.
+        if revised != current {
+            mutations.append({"node_id": node_id, "new_sem_prompt": revised});
         }
     }
-
-    if len(mutations) == 0 {
-        missing = [t for t in set(normalize_tokens(expected)) if not (t in set(normalize_tokens(actual)))];
-        workers = worker_states(agent_states);
-        if len(workers) > 0 and len(missing) > 0 {
-            target = workers[0] as dict;
-            node_id = str(target["node_id"]);
-            prompt = prompt_of(target);
-            focus = ", ".join(sorted(missing)[:5]);
-            addition = f"Make sure the answer addresses: {focus}.";
-            if addition not in prompt {
-                mutations.append({"node_id": node_id, "new_sem_prompt": prompt + " " + addition});
-            }
-        }
-    }
-
     return mutations;
 }
 
@@ -360,7 +489,7 @@ def optimize_with_memory(payload: dict, memory: OptimizerMemory) -> dict {
     record(memory, sig, task_key, score);
     summary = verdict(memory, sig, memory.previous_signature, score);
 
-    mutations = propose_mutations(agent_states, facts, actual, expected);
+    mutations = propose_mutations(agent_states, facts, actual, expected, memory);
 
     trace_note = f"{facts.steps} executed, {facts.skipped} skipped, {facts.errors} errored";
     if len(mutations) == 0 {

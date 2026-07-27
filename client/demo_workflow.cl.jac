@@ -98,7 +98,7 @@ glob:pub DEMO_WORKFLOW: dict = {
             },
             "model_config": {
                 "provider": "google",
-                "model": "gemini-2.0-flash",
+                "model": "gemini-2.5-flash",
                 "temperature": 0,
                 "top_p": 1,
                 "max_output_tokens": 300,
@@ -142,7 +142,7 @@ glob:pub DEMO_WORKFLOW: dict = {
             },
             "model_config": {
                 "provider": "google",
-                "model": "gemini-2.0-flash",
+                "model": "gemini-2.5-flash",
                 "temperature": 0.2,
                 "top_p": 1,
                 "max_output_tokens": 1500,
@@ -182,7 +182,7 @@ glob:pub DEMO_WORKFLOW: dict = {
             },
             "model_config": {
                 "provider": "google",
-                "model": "gemini-2.0-flash",
+                "model": "gemini-2.5-flash",
                 "temperature": 0.2,
                 "top_p": 1,
                 "max_output_tokens": 1500,
@@ -227,7 +227,7 @@ glob:pub DEMO_WORKFLOW: dict = {
             },
             "model_config": {
                 "provider": "google",
-                "model": "gemini-2.0-flash",
+                "model": "gemini-2.5-flash",
                 "temperature": 0.1,
                 "top_p": 1,
                 "max_output_tokens": 1200,

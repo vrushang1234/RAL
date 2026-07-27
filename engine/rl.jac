@@ -1,19 +1,26 @@
 """RL bridge: call the optimizer + persist payload/response pairs under runs/.
 
-The optimizer is now the Jac implementation in `rl/bridge.jac`, which scores the
-trace deterministically and - crucially - accumulates observations across calls
-so it can report whether a change is actually supported rather than just showing
-a number that went up. See docs/rl-optimization.md section 9.
+The optimizer is the Jac implementation in `rl/bridge.jac`, which scores the
+trace deterministically and accumulates observations across calls so it can say
+whether a change is actually supported rather than just showing a number that
+went up. See docs/rl-optimization.md section 9.
 
-To fall back to the Python path (`rl_bridge.optimize`, currently backed by
-`mock_rl.py`), swap the two marked lines in `call_rl`.
+DO NOT revert this to `import from rl_bridge { optimize }` without meaning to.
+That path runs `mock_rl.py`, which appends the literal sentence "Be more
+concise and specific." to a prompt on every single call with no de-duplication,
+so prompts accumulate it N times and the score climbs by counting the word.
+That is a rehearsal fixture, not an optimizer.
+
+The Python path is still importable below as a deliberate fallback (an external
+teammate optimizer can be dropped into `rl_bridge.py`); swap the two marked
+lines in `call_rl` to use it.
 """
 
 import json;
 import os;
 import from datetime { datetime }
 import from rl.bridge { OptimizerMemory, optimize_with_memory }
-# Python fallback, kept wired for the mock / an external teammate optimizer.
+# Deliberate fallback: mock_rl today, an external optimizer later.
 import from rl_bridge { optimize as python_optimize }
 
 

@@ -4,6 +4,7 @@ def:pub NodeInspector(
     workflow: dict,
     node_id: str,
     on_update_prompt: Callable[[str, str], None],
+    on_rename_node: Callable[[str, str], None],
     on_delete_node: Callable[[str], None],
     on_close: Callable[[], None]
 ) -> JsxElement {
@@ -30,9 +31,14 @@ def:pub NodeInspector(
     in_schema: str = JSON.stringify(selected["expected_input_schema"], None, 2) if selected["expected_input_schema"] else "{}";
     out_schema: str = JSON.stringify(selected["expected_output_schema"], None, 2) if selected["expected_output_schema"] else "{}";
     role: str = str(selected["fixed_role_description"]) if selected["fixed_role_description"] else "";
+    node_name: str = str(selected["node_name"]) if selected["node_name"] else "";
 
     def handle_prompt_change(e: ChangeEvent) {
         on_update_prompt(node_id, e.target.value);
+    }
+
+    def handle_name_change(e: ChangeEvent) {
+        on_rename_node(node_id, e.target.value);
     }
 
     def handle_close(_e: MouseEvent) {
@@ -61,12 +67,31 @@ def:pub NodeInspector(
             "fontFamily": "system-ui, sans-serif"
         }}
     >
-        <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "12px"}}>
-            <div>
-                <div style={{"fontWeight": "700", "fontSize": "16px"}}>{str(selected["node_name"])}</div>
-                <div style={{"fontSize": "12px", "color": "#94a3b8", "marginTop": "4px"}}>{str(selected["type"])}</div>
+        <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "marginBottom": "12px", "gap": "10px"}}>
+            <div style={{"flex": "1", "minWidth": "0"}}>
+                <div style={{"fontSize": "11px", "textTransform": "uppercase", "letterSpacing": "0.04em", "color": "#94a3b8", "marginBottom": "6px"}}>
+                    Node name
+                </div>
+                <input
+                    type="text"
+                    value={node_name}
+                    onChange={handle_name_change}
+                    placeholder="Node name"
+                    style={{
+                        "width": "100%",
+                        "boxSizing": "border-box",
+                        "background": "#020617",
+                        "color": "#f8fafc",
+                        "border": "1px solid #475569",
+                        "borderRadius": "6px",
+                        "padding": "6px 10px",
+                        "fontSize": "14px",
+                        "fontWeight": "700"
+                    }}
+                />
+                <div style={{"fontSize": "12px", "color": "#94a3b8", "marginTop": "6px"}}>{str(selected["type"])}</div>
             </div>
-            <div style={{"display": "flex", "gap": "8px"}}>
+            <div style={{"display": "flex", "gap": "8px", "paddingTop": "18px"}}>
                 <button
                     type="button"
                     onClick={handle_delete}

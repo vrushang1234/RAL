@@ -23,9 +23,10 @@ def:pub AppShell -> JsxElement {
     has running: bool = False;
     has last_output: str = "";
     has library: list = [];
+    has drafts: list = [];
     has grammar_errors: list = [];
     has id_counter: int = 1;
-    has load_select: str = "";
+    has load_select: str = "wf_demo_triage";
 
     def blank_workflow(workflow_id: str, name: str) -> dict {
         return {
@@ -69,6 +70,88 @@ def:pub AppShell -> JsxElement {
         workflow = next_wf;
         v = validate_flow(next_wf);
         grammar_errors = v["errors"] as list if v["errors"] else [];
+        remember_draft(next_wf);
+    }
+
+    def remember_draft(wf: dict) {
+        wid = str(wf["workflow_id"]) if wf["workflow_id"] else "";
+        if wid == "" or wid == "wf_demo_triage" {
+            return;
+        }
+        in_lib: bool = False;
+        for item in library {
+            if str((item as dict)["workflow_id"]) == wid {
+                in_lib = True;
+            }
+        }
+        if in_lib {
+            drop_draft(wid);
+            return;
+        }
+        updated: list = [];
+        found: bool = False;
+        for d in drafts {
+            dd: dict = d as dict;
+            if str(dd["workflow_id"]) == wid {
+                updated = updated + [{
+                    "workflow_id": wid,
+                    "name": str(wf["workflow_name"]) + " (unsaved)",
+                    "body": wf
+                }];
+                found = True;
+            } else {
+                updated = updated + [dd];
+            }
+        }
+        if not found {
+            updated = updated + [{
+                "workflow_id": wid,
+                "name": str(wf["workflow_name"]) + " (unsaved)",
+                "body": wf
+            }];
+        }
+        drafts = updated;
+    }
+
+    def drop_draft(workflow_id: str) {
+        kept: list = [];
+        for d in drafts {
+            if str((d as dict)["workflow_id"]) != workflow_id {
+                kept = kept + [d];
+            }
+        }
+        drafts = kept;
+    }
+
+    def find_draft(workflow_id: str) -> any {
+        for d in drafts {
+            if str((d as dict)["workflow_id"]) == workflow_id {
+                return d;
+            }
+        }
+        return None;
+    }
+
+    def library_options() -> list {
+        opts: list = [];
+        seen: dict = {};
+        for item in library {
+            wid = str((item as dict)["workflow_id"]);
+            seen[wid] = True;
+            opts = opts + [item];
+        }
+        for d in drafts {
+            dd: dict = d as dict;
+            wid = str(dd["workflow_id"]);
+            if wid not in seen {
+                opts = opts + [{
+                    "workflow_id": wid,
+                    "name": str(dd["name"]),
+                    "updated_at": ""
+                }];
+            }
+        }
+        return opts;
     }
 
     def current_workflow() -> dict {
@@ -187,6 +270,59 @@ def:pub AppShell -> JsxElement {
         append_log("info", "Updated system_prompt on " + node_id);
     }
 
+    def on_rename_workflow(e: ChangeEvent) {
+        name = str(e.target.value);
+        base: dict = current_workflow();
+        renamed_base: dict = {
+            "schema_version": base["schema_version"],
+            "workflow_id": base["workflow_id"],
+            "workflow_name": name,
+            "workflow_version": base["workflow_version"],
+            "configuration_hash": base["configuration_hash"],
+            "status": base["status"],
+            "description": base["description"],
+            "entry_node_id": base["entry_node_id"],
+            "output_node_id": base["output_node_id"],
+            "input_schema": base["input_schema"],
+            "output_schema": base["output_schema"],
+            "global_config": base["global_config"],
+            "tool_catalog": base["tool_catalog"],
+            "skill_catalog": base["skill_catalog"],
+            "nodes": base["nodes"],
+            "edges": base["edges"],
+            "metadata": base["metadata"]
+        };
+        replace_workflow(rebuild_workflow(renamed_base, base["nodes"] as list, base["edges"] as list));
+    }
+
+    def on_rename_node(node_id: str, new_name: str) {
+        base: dict = current_workflow();
+        new_nodes: list = [];
+        for n in (base["nodes"] as list) {
+            if str(n["node_id"]) == node_id {
+                new_nodes = new_nodes + [{
+                    "node_id": n["node_id"],
+                    "node_name": new_name,
+                    "type": n["type"],
+                    "enabled": n["enabled"],
+                    "fixed_role_description": n["fixed_role_description"],
+                    "expected_input_schema": n["expected_input_schema"],
+                    "expected_output_schema": n["expected_output_schema"],
+                    "prompt_config": n["prompt_config"],
+                    "model_config": n["model_config"],
+                    "skill_bindings": n["skill_bindings"],
+                    "tool_bindings": n["tool_bindings"],
+                    "runtime_config": n["runtime_config"],
+                    "type_config": n["type_config"],
+                    "ui": n["ui"]
+                }];
+            } else {
+                new_nodes = new_nodes + [n];
+            }
+        }
+        replace_workflow(rebuild_workflow(base, new_nodes, base["edges"] as list));
+    }
+
     def on_nodes_change(node_id: str, x: float, y: float) {
         base: dict = current_workflow();
         new_nodes: list = [];
@@ -233,9 +369,19 @@ def:pub AppShell -> JsxElement {
             return;
         }
         id_counter = id_counter + 1;
-        nid = "n_" + kind.lower() + "_" + str(id_counter);
-        x = 80.0 + float(id_counter) * 24.0;
-        y = 80.0 + float(id_counter) * 28.0;
+        suffix = "node";
+        if kind == "Trigger" {
+            suffix = "trigger";
+        } elif kind == "Router" {
+            suffix = "router";
+        } elif kind == "WorkerAgent" {
+            suffix = "agent";
+        } elif kind == "Aggregator" {
+            suffix = "aggregator";
+        }
+        nid = "n_" + suffix + "_" + str(id_counter);
+        x = 80.0 + (id_counter as float) * 24.0;
+        y = 80.0 + (id_counter as float) * 28.0;
         new_node = make_node(kind, nid, x, y);
         new_nodes = (base["nodes"] as list) + [new_node];
         replace_workflow(rebuild_workflow(base, new_nodes, base["edges"] as list));
@@ -378,12 +524,18 @@ def:pub AppShell -> JsxElement {
     }
 
     async can with entry {
-        v = validate_flow(DEMO_WORKFLOW);
-        grammar_errors = v["errors"] as list if v["errors"] else [];
+        replace_workflow(DEMO_WORKFLOW);
+        load_select = "wf_demo_triage";
         try {
             res: dict = await list_workflows();
             items: list = res["items"] as list if res["items"] else [];
-            if len(items) == 0 {
+            has_demo: bool = False;
+            for item in items {
+                if str((item as dict)["workflow_id"]) == "wf_demo_triage" {
+                    has_demo = True;
+                }
+            }
+            if not has_demo {
                 seeded = await save_workflow(DEMO_WORKFLOW);
                 if seeded["ok"] {
                     append_log("info", "[library] seeded demo workflow");
@@ -392,9 +544,16 @@ def:pub AppShell -> JsxElement {
                 }
             }
             library = items;
+            demo_res = await get_workflow("wf_demo_triage");
+            if demo_res and demo_res["body"] {
+                replace_workflow(demo_res["body"] as dict);
+                load_select = "wf_demo_triage";
+            }
             append_log("info", "[library] loaded " + str(len(items)) + " workflow(s)");
         } except Exception as err {
             append_log("error", "[library] seed/list failed: " + str(err));
+            replace_workflow(DEMO_WORKFLOW);
+            load_select = "wf_demo_triage";
         }
     }
 
@@ -410,6 +569,7 @@ def:pub AppShell -> JsxElement {
             res = await save_workflow(wf);
             if res["ok"] {
                 saved_id = str(res["workflow_id"]);
+                drop_draft(saved_id);
                 append_log("info", "[library] saved " + saved_id);
                 load_select = saved_id;
                 await refresh_library();
@@ -425,21 +585,30 @@ def:pub AppShell -> JsxElement {
         if workflow_id == "" {
             return;
         }
+        draft = find_draft(workflow_id);
+        if draft {
+            replace_workflow((draft as dict)["body"] as dict);
+            selected_node_id = "";
+            load_select = workflow_id;
+            append_log("info", "[library] opened draft " + workflow_id);
+            return;
+        }
         try {
             res = await get_workflow(workflow_id);
             if res and res["body"] {
+                drop_draft(workflow_id);
                 replace_workflow(res["body"] as dict);
                 selected_node_id = "";
                 load_select = workflow_id;
                 append_log("info", "[library] loaded " + workflow_id);
             } else {
                 append_log("error", "[library] not found: " + workflow_id);
-                load_select = "";
+                load_select = str(current_workflow()["workflow_id"]);
                 await refresh_library();
             }
         } except Exception as err {
             append_log("error", "[library] " + str(err));
-            load_select = "";
+            load_select = str(current_workflow()["workflow_id"]);
         }
     }
 
@@ -452,21 +621,25 @@ def:pub AppShell -> JsxElement {
             }
         }
         if not in_lib {
+            drop_draft(wid);
             append_log("info", "[library] discarded unsaved draft " + wid);
-            id_counter = id_counter + 1;
-            replace_workflow(blank_workflow("wf_draft_" + str(id_counter), "Untitled"));
+            replace_workflow(DEMO_WORKFLOW);
             selected_node_id = "";
-            load_select = "";
+            load_select = "wf_demo_triage";
+            return;
+        }
+        if wid == "wf_demo_triage" {
+            append_log("error", "[library] demo workflow cannot be deleted — use New for a blank canvas");
             return;
         }
         try {
             res = await delete_workflow(wid);
             if res["ok"] {
+                drop_draft(wid);
                 append_log("info", "[library] deleted " + wid);
-                id_counter = id_counter + 1;
-                replace_workflow(blank_workflow("wf_draft_" + str(id_counter), "Untitled"));
+                replace_workflow(DEMO_WORKFLOW);
                 selected_node_id = "";
-                load_select = "";
+                load_select = "wf_demo_triage";
                 await refresh_library();
             } else {
                 append_log("error", "[library] " + str(res["errors"]));
@@ -479,10 +652,11 @@ def:pub AppShell -> JsxElement {
     def on_new(_e: MouseEvent) {
         id_counter = id_counter + 1;
         next_id = "wf_custom_" + str(id_counter);
-        replace_workflow(blank_workflow(next_id, "Untitled " + str(id_counter)));
+        next_name = "Untitled " + str(id_counter);
+        replace_workflow(blank_workflow(next_id, next_name));
         selected_node_id = "";
-        load_select = "";
-        append_log("info", "[library] new blank canvas " + next_id);
+        load_select = next_id;
+        append_log("info", "[library] new blank canvas " + next_id + " — add nodes, then Save");
     }
 
     def add_trigger(_e: MouseEvent) { add_node("Trigger"); }
@@ -525,11 +699,25 @@ def:pub AppShell -> JsxElement {
                 "flexDirection": "column",
                 "gap": "8px"
             }}>
-                <div style={{"display": "flex", "alignItems": "baseline", "gap": "12px"}}>
+                <div style={{"display": "flex", "alignItems": "center", "gap": "12px"}}>
                     <span style={{"fontWeight": "800", "letterSpacing": "0.04em"}}>RAL</span>
-                    <span style={{"fontSize": "13px", "color": "#94a3b8"}}>
-                        {str(workflow["workflow_name"]) if workflow["workflow_name"] else "Workflow"}
-                    </span>
+                    <input
+                        type="text"
+                        value={str(workflow["workflow_name"]) if workflow["workflow_name"] else ""}
+                        onChange={on_rename_workflow}
+                        placeholder="Workflow name"
+                        style={{
+                            "flex": "1",
+                            "maxWidth": "360px",
+                            "background": "#020617",
+                            "color": "#f8fafc",
+                            "border": "1px solid #334155",
+                            "borderRadius": "6px",
+                            "padding": "6px 10px",
+                            "fontSize": "13px",
+                            "fontWeight": "600"
+                        }}
+                    />
                 </div>
                 <div style={{"display": "flex", "flexWrap": "wrap", "gap": "8px", "alignItems": "center"}}>
                     <button type="button" style={btn} onClick={on_new}>New</button>
@@ -548,7 +736,7 @@ def:pub AppShell -> JsxElement {
                         }}
                     >
                         <option value="">Load…</option>
-                        {for item in library {
+                        {for item in library_options() {
                             <option
                                 key={str((item as dict)["workflow_id"])}
                                 value={str((item as dict)["workflow_id"])}
@@ -595,6 +783,7 @@ def:pub AppShell -> JsxElement {
                 workflow={workflow}
                 node_id={selected_node_id}
                 on_update_prompt={on_update_prompt}
+                on_rename_node={on_rename_node}
                 on_delete_node={on_delete_node}
                 on_close={on_close_inspector}
             />
