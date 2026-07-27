@@ -21,9 +21,12 @@
 
 ## Recent Changes
 
-- 2026-07-26: **Rebased `hmahuvaw` onto `main`.** Resolved `engine/rl.jac` by keeping main's Jac
-  `rl.bridge` optimizer (`optimizer_memory` / `call_rl` + python fallback) and adding Eval
-  Dashboard's `log_eval_report`. Branch tip: `48c3fcf`.
+- 2026-07-26: **Fixed GET / 404 after rebase.** `engine/rl.jac` still had committed conflict
+  markers → client build failed → empty `.jac/client/dist`. Resolved to Jac `rl.bridge`
+  (`optimizer_memory` / `call_rl` + python fallback) + `log_eval_report`; prebuilt via
+  `jac run scripts/compile_client.jac` and restarted gateway (200 on `/`).
+- 2026-07-26: **Rebased `hmahuvaw` onto `main`.** Intended `engine/rl.jac` merge kept Jac
+  optimizer + eval report; conflict markers had been left in the tree until the 404 fix above.
 - 2026-07-26: **Three complex demo workflows.** New seeded examples showcasing the dashboard/metrics:
   - `client/wf_sre_incident.cl.jac` — SRE Incident Response (nested routers: severity → service; diagnosis → remediation chain; 9 nodes/11 edges)
   - `client/wf_recruiting.cl.jac` — Recruiting Pipeline (Worker→Router: skills assessor feeds a Decision Router advance/reject; 9 nodes/10 edges)

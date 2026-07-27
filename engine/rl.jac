@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-"""Persist RL train payloads and eval-matrix reports under runs/."""
-=======
 """RL bridge: call the optimizer + persist payload/response pairs under runs/.
 
 The optimizer is the Jac implementation in `rl/bridge.jac`, which scores the
@@ -20,27 +17,11 @@ lines in `call_rl` to use it.
 
 Also persists eval-matrix reports via `log_eval_report`.
 """
->>>>>>> 4d9fe7a (Full loop doe)
 
 import json;
 import os;
 import from datetime { datetime }
 import from rl.bridge { OptimizerMemory, optimize_with_memory }
-<<<<<<< HEAD
-
-def _ensure_memory() -> OptimizerMemory {
-    for m in [root -->][?:OptimizerMemory] {
-        return m;
-    }
-    mem = OptimizerMemory();
-    root ++> mem;
-    return mem;
-}
-
-def call_rl(payload: dict) -> dict {
-    mem = _ensure_memory();
-    return optimize_with_memory(payload, mem);
-=======
 # Deliberate fallback: mock_rl today, an external optimizer later.
 import from rl_bridge { optimize as python_optimize }
 
@@ -64,7 +45,6 @@ def optimizer_memory -> OptimizerMemory {
 def call_rl(payload: dict) -> dict {
     return optimize_with_memory(payload, optimizer_memory());
     # Fallback: return python_optimize(payload) as dict;
->>>>>>> 4d9fe7a (Full loop doe)
 }
 
 
