@@ -1,0 +1,704 @@
+{
+  "schema_version": "1.0.0",
+  "workflow_id": "wf_research_memo",
+  "workflow_name": "Investment Research Memo",
+  "workflow_version": 1,
+  "configuration_hash": null,
+  "status": "DRAFT",
+  "description": "Route a research request by asset class to an analyst, then chain every path through a risk assessor and a compliance reviewer before the memo is assembled.",
+  "entry_node_id": "trigger_request",
+  "output_node_id": "aggregator_memo",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "input": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "input"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "output": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "output"
+    ]
+  },
+  "global_config": {
+    "max_workflow_runtime_ms": 120000,
+    "max_parallel_nodes": 4,
+    "fail_fast": true,
+    "context_config": {
+      "mode": "SELECTIVE",
+      "max_context_tokens": 16000,
+      "include_upstream_outputs": true,
+      "include_tool_outputs": true,
+      "include_execution_history": false,
+      "shared_memory_enabled": false
+    },
+    "observability_config": {
+      "store_node_inputs": true,
+      "store_node_outputs": true,
+      "store_tool_inputs": true,
+      "store_tool_outputs": true,
+      "store_token_usage": true,
+      "store_latency_metrics": true
+    }
+  },
+  "tool_catalog": [],
+  "skill_catalog": [],
+  "nodes": [
+    {
+      "node_id": "trigger_request",
+      "node_name": "Research Request",
+      "type": "Trigger",
+      "enabled": true,
+      "fixed_role_description": "Accepts the raw research request as workflow input.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": null,
+      "model_config": null,
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 0,
+        "retry_backoff_ms": 0,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": {
+          "trigger_type": "MANUAL",
+          "config": {}
+        },
+        "router": null,
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 60,
+          "y": 300
+        },
+        "width": 280,
+        "height": 160,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "router_asset",
+      "node_name": "Asset-Class Router",
+      "type": "Router",
+      "enabled": true,
+      "fixed_role_description": "You classify research requests by asset class.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_asset_router",
+        "prompt_version": 1,
+        "system_prompt": "Decide if this request is about equity, macro, or crypto.",
+        "user_prompt_template": "{{workflow_input}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "workflow_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 340,
+          "y": 300
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_equity",
+      "node_name": "Equity Analyst",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are an equity analyst producing fundamental analysis of a company or sector.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_equity",
+        "prompt_version": 1,
+        "system_prompt": "Analyze.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the analysis.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_macro",
+      "node_name": "Macro Analyst",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a macro analyst covering rates, inflation, currencies, and central-bank policy.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_macro",
+        "prompt_version": 1,
+        "system_prompt": "Analyze.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the analysis.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 320
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_crypto",
+      "node_name": "Crypto Analyst",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a digital-assets analyst covering tokens, protocols, and on-chain activity.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_crypto",
+        "prompt_version": 1,
+        "system_prompt": "Analyze.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the analysis.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 580
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_risk",
+      "node_name": "Risk Assessor",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You stress-test the analyst's thesis and enumerate downside risks and position sizing limits.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_risk",
+        "prompt_version": 1,
+        "system_prompt": "Assess risk.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the risk assessment.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 940,
+          "y": 300
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_compliance",
+      "node_name": "Compliance Reviewer",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You review the analysis for regulatory issues, required disclaimers, and restricted-list conflicts.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_compliance",
+        "prompt_version": 1,
+        "system_prompt": "Review.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the compliance review.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 1260,
+          "y": 300
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "aggregator_memo",
+      "node_name": "Memo Assembler",
+      "type": "Aggregator",
+      "enabled": true,
+      "fixed_role_description": "You assemble the final investment memo from the analysis, risk assessment, and compliance review.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_memo_agg",
+        "prompt_version": 1,
+        "system_prompt": "Combine.",
+        "user_prompt_template": "{{upstream_outputs}}",
+        "output_instructions": "Produce the final workflow output.",
+        "variables": [
+          "upstream_outputs"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.1,
+        "top_p": 1,
+        "max_output_tokens": 1200,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": null,
+        "aggregator": {
+          "strategy": "SUMMARIZE",
+          "required_upstream_node_ids": [
+            "worker_compliance"
+          ],
+          "custom_instructions": null
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 1580,
+          "y": 300
+        },
+        "width": 300,
+        "height": 220,
+        "collapsed": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "res_e1",
+      "source_node_id": "trigger_request",
+      "target_node_id": "router_asset",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$.input",
+        "target": "$.workflow_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "res_e2",
+      "source_node_id": "router_asset",
+      "target_node_id": "worker_equity",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "equity"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "equity"
+      }
+    },
+    {
+      "edge_id": "res_e3",
+      "source_node_id": "router_asset",
+      "target_node_id": "worker_macro",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "macro"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "macro"
+      }
+    },
+    {
+      "edge_id": "res_e4",
+      "source_node_id": "router_asset",
+      "target_node_id": "worker_crypto",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "crypto"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "crypto"
+      }
+    },
+    {
+      "edge_id": "res_e5",
+      "source_node_id": "worker_equity",
+      "target_node_id": "worker_risk",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "res_e6",
+      "source_node_id": "worker_macro",
+      "target_node_id": "worker_risk",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "res_e7",
+      "source_node_id": "worker_crypto",
+      "target_node_id": "worker_risk",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "res_e8",
+      "source_node_id": "worker_risk",
+      "target_node_id": "worker_compliance",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "res_e9",
+      "source_node_id": "worker_compliance",
+      "target_node_id": "aggregator_memo",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_compliance"
+      },
+      "ui": {
+        "label": null
+      }
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-07-26T00:00:00Z",
+    "updated_at": "2026-07-26T00:00:00Z",
+    "created_by": "demo",
+    "tags": [
+      "demo",
+      "research",
+      "finance"
+    ]
+  }
+}

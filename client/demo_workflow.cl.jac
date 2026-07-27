@@ -314,3 +314,61 @@ glob:pub DEMO_DATASET: list = [
         "expected_ground_truth": "Reply acknowledging the crash, asking for the app version and macOS version, and suggesting reinstall as an interim fix."
     }
 ];
+
+# Labeled eval matrix for the RL testbench dashboard (category × difficulty).
+glob:pub EVAL_MATRIX: list = [
+    {
+        "task_id": "bill_easy",
+        "category": "billing",
+        "difficulty": "easy",
+        "initial_input": "Hi, I was charged twice for my subscription this month. Please refund one charge.",
+        "expected_ground_truth": "Apologetic reply confirming the duplicate charge will be refunded within 5-7 business days, with a reference number.",
+        "expected_route": "billing",
+        "expected_worker_id": "worker_billing"
+    },
+    {
+        "task_id": "bill_hard",
+        "category": "billing",
+        "difficulty": "hard",
+        "initial_input": "You billed my corporate card ending 4412 three times for Pro seats I already cancelled last quarter. I need a full refund plus a credit memo before month close.",
+        "expected_ground_truth": "Apologetic reply confirming the duplicate Pro seat charges will be refunded, issuing a credit memo, and providing a reference number within 5-7 business days.",
+        "expected_route": "billing",
+        "expected_worker_id": "worker_billing"
+    },
+    {
+        "task_id": "tech_easy",
+        "category": "technical",
+        "difficulty": "easy",
+        "initial_input": "The app crashes every time I try to export a PDF on macOS.",
+        "expected_ground_truth": "Reply acknowledging the crash, asking for the app version and macOS version, and suggesting reinstall as an interim fix.",
+        "expected_route": "technical",
+        "expected_worker_id": "worker_technical"
+    },
+    {
+        "task_id": "tech_hard",
+        "category": "technical",
+        "difficulty": "hard",
+        "initial_input": "Export to PDF hangs at 47% on macOS Sequoia with our SSO build; Activity Monitor shows a beachball and Console logs a Metal shader fault. Need a workaround before Friday's board deck.",
+        "expected_ground_truth": "Reply acknowledging the hang and Metal shader fault, asking for app version and macOS build, and suggesting reinstall plus a non-Metal interim export workaround before Friday.",
+        "expected_route": "technical",
+        "expected_worker_id": "worker_technical"
+    },
+    {
+        "task_id": "bill_medium",
+        "category": "billing",
+        "difficulty": "medium",
+        "initial_input": "I upgraded to annual billing but still see monthly invoices. Can you confirm the plan and refund any overcharge?",
+        "expected_ground_truth": "Apologetic reply confirming the annual plan, explaining the invoice mix-up, and confirming any overcharge will be refunded with a reference number.",
+        "expected_route": "billing",
+        "expected_worker_id": "worker_billing"
+    },
+    {
+        "task_id": "tech_medium",
+        "category": "technical",
+        "difficulty": "medium",
+        "initial_input": "Login works in Chrome but Safari keeps saying session expired after SSO. Happens on both laptop and iPad.",
+        "expected_ground_truth": "Reply acknowledging the Safari SSO session issue, asking for browser versions, and suggesting clearing site data plus an interim Chrome workaround.",
+        "expected_route": "technical",
+        "expected_worker_id": "worker_technical"
+    }
+];

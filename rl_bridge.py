@@ -1,6 +1,6 @@
-# Phase 5 swap: comment mock, uncomment teammate (or HTTP fallback in phase-5 plan).
+# Primary: unused when engine/rl.jac calls Jac rl.bridge directly.
+# Fallback import retained for scripts that still `from rl_bridge import optimize`.
 from mock_rl import optimize as _impl
-# from teammate_rl import optimize as _impl
 
 REQUIRED_KEYS = {"critic_score", "analysis_log", "prompt_mutations"}
 

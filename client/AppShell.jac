@@ -7,12 +7,50 @@ sv import from endpoints {
     delete_workflow
 }
 
-import from .demo_workflow { DEMO_WORKFLOW, DEMO_DATASET }  # demo_workflow.cl.jac
+import from .demo_workflow { DEMO_WORKFLOW, DEMO_DATASET, EVAL_MATRIX }  # demo_workflow.cl.jac
+import from .wf_sre_incident { SRE_WORKFLOW, SRE_DATASET, SRE_EVAL_MATRIX }
+import from .wf_recruiting { RECRUITING_WORKFLOW, RECRUITING_DATASET, RECRUITING_EVAL_MATRIX }
+import from .wf_research_memo { RESEARCH_WORKFLOW, RESEARCH_DATASET, RESEARCH_EVAL_MATRIX }
 import from .flow_grammar { validate_flow }  # flow_grammar.cl.jac
 import from .node_templates { make_node, edge_allowed }  # node_templates.cl.jac
-import from .FlowCanvas { FlowCanvas }
-import from .NodeInspector { NodeInspector }
 import from .TrainingConsole { TrainingConsole }
+import from .EvalDashboard { EvalDashboard }
+import from .NodeInspector { NodeInspector }
+import from .FlowCanvas { FlowCanvas }
+
+# Built-in example workflows seeded into the library on load; protected from Delete.
+glob SEED_WORKFLOWS: list = [DEMO_WORKFLOW, SRE_WORKFLOW, RECRUITING_WORKFLOW, RESEARCH_WORKFLOW];
+
+def is_seeded_workflow(workflow_id: str) -> bool {
+    for wf_any in SEED_WORKFLOWS {
+        if str((wf_any as dict)["workflow_id"]) == workflow_id {
+            return True;
+        }
+    }
+    return False;
+}
+
+def dataset_for_workflow(workflow_id: str) -> list {
+    if workflow_id == "wf_sre_incident" {
+        return SRE_DATASET;
+    } elif workflow_id == "wf_recruiting" {
+        return RECRUITING_DATASET;
+    } elif workflow_id == "wf_research_memo" {
+        return RESEARCH_DATASET;
+    }
+    return DEMO_DATASET;
+}
+
+def eval_matrix_for_workflow(workflow_id: str) -> list {
+    if workflow_id == "wf_sre_incident" {
+        return SRE_EVAL_MATRIX;
+    } elif workflow_id == "wf_recruiting" {
+        return RECRUITING_EVAL_MATRIX;
+    } elif workflow_id == "wf_research_memo" {
+        return RESEARCH_EVAL_MATRIX;
+    }
+    return EVAL_MATRIX;
+}
 
 def:pub AppShell -> JsxElement {
     has workflow: dict = DEMO_WORKFLOW;
@@ -27,6 +65,7 @@ def:pub AppShell -> JsxElement {
     has grammar_errors: list = [];
     has id_counter: int = 1;
     has load_select: str = "wf_demo_triage";
+    has show_eval: bool = False;
 
     def blank_workflow(workflow_id: str, name: str) -> dict {
         return {
@@ -75,7 +114,7 @@ def:pub AppShell -> JsxElement {
 
     def remember_draft(wf: dict) {
         wid = str(wf["workflow_id"]) if wf["workflow_id"] else "";
-        if wid == "" or wid == "wf_demo_triage" {
+        if wid == "" or is_seeded_workflow(wid) {
             return;
         }
         in_lib: bool = False;
@@ -529,19 +568,27 @@ def:pub AppShell -> JsxElement {
         try {
             res: dict = await list_workflows();
             items: list = res["items"] as list if res["items"] else [];
-            has_demo: bool = False;
-            for item in items {
-                if str((item as dict)["workflow_id"]) == "wf_demo_triage" {
-                    has_demo = True;
+            seeded_any: bool = False;
+            for wf_any in SEED_WORKFLOWS {
+                wf_seed: dict = wf_any as dict;
+                seed_id = str(wf_seed["workflow_id"]);
+                present: bool = False;
+                for item in items {
+                    if str((item as dict)["workflow_id"]) == seed_id {
+                        present = True;
+                    }
+                }
+                if not present {
+                    seeded = await save_workflow(wf_seed);
+                    if seeded["ok"] {
+                        seeded_any = True;
+                        append_log("info", "[library] seeded " + seed_id);
+                    }
                 }
             }
-            if not has_demo {
-                seeded = await save_workflow(DEMO_WORKFLOW);
-                if seeded["ok"] {
-                    append_log("info", "[library] seeded demo workflow");
-                    res2: dict = await list_workflows();
-                    items = res2["items"] as list if res2["items"] else [];
-                }
+            if seeded_any {
+                res2: dict = await list_workflows();
+                items = res2["items"] as list if res2["items"] else [];
             }
             library = items;
             demo_res = await get_workflow("wf_demo_triage");
@@ -628,8 +675,8 @@ def:pub AppShell -> JsxElement {
             load_select = "wf_demo_triage";
             return;
         }
-        if wid == "wf_demo_triage" {
-            append_log("error", "[library] demo workflow cannot be deleted — use New for a blank canvas");
+        if is_seeded_workflow(wid) {
+            append_log("error", "[library] built-in example workflows cannot be deleted — use New for a blank canvas");
             return;
         }
         try {
@@ -659,6 +706,14 @@ def:pub AppShell -> JsxElement {
         append_log("info", "[library] new blank canvas " + next_id + " — add nodes, then Save");
     }
 
+    def on_toggle_eval(_e: MouseEvent) {
+        show_eval = not show_eval;
+    }
+
+    def on_close_eval() {
+        show_eval = False;
+    }
+
     def add_trigger(_e: MouseEvent) { add_node("Trigger"); }
     def add_router(_e: MouseEvent) { add_node("Router"); }
     def add_agent(_e: MouseEvent) { add_node("WorkerAgent"); }
@@ -681,6 +736,10 @@ def:pub AppShell -> JsxElement {
         "fontSize": "12px",
         "fontWeight": "600"
     };
+    eval_btn_label: str = "Eval";
+    if show_eval {
+        eval_btn_label = "Hide Eval";
+    }
 
     return <div style={{
         "display": "flex",
@@ -748,6 +807,10 @@ def:pub AppShell -> JsxElement {
                     <button type="button" style={btn} onClick={add_router}>+ Router</button>
                     <button type="button" style={btn} onClick={add_agent}>+ Agent</button>
                     <button type="button" style={btn} onClick={add_aggregator}>+ Aggregator</button>
+                    <span style={{"color": "#475569", "margin": "0 4px"}}>|</span>
+                    <button type="button" style={btn} onClick={on_toggle_eval}>
+                        {eval_btn_label}
+                    </button>
                 </div>
                 {if len(grammar_errors) > 0 {
                     <div style={{"fontSize": "12px", "color": "#fbbf24"}}>
@@ -764,20 +827,36 @@ def:pub AppShell -> JsxElement {
                 on_delete_node={on_delete_node}
             />
         </div>
-        <TrainingConsole
-            workflow={workflow}
-            dataset={DEMO_DATASET}
-            logs={logs}
-            running={running}
-            last_output={last_output}
-            train_control={train_control}
-            append_logs={append_logs}
-            apply_updated_nodes={apply_updated_nodes}
-            get_workflow={current_workflow}
-            set_running={set_running}
-            set_last_output={set_last_output}
-            request_stop={request_stop}
-        />
+        {if show_eval {
+            <EvalDashboard
+                key={"eval_" + str(workflow["workflow_id"])}
+                eval_matrix={eval_matrix_for_workflow(str(workflow["workflow_id"]))}
+                get_workflow={current_workflow}
+                apply_updated_nodes={apply_updated_nodes}
+                append_logs={append_logs}
+                running={running}
+                set_running={set_running}
+                train_control={train_control}
+                request_stop={request_stop}
+                on_close={on_close_eval}
+            />
+        } else {
+            <TrainingConsole
+                key={"train_" + str(workflow["workflow_id"])}
+                workflow={workflow}
+                dataset={dataset_for_workflow(str(workflow["workflow_id"]))}
+                logs={logs}
+                running={running}
+                last_output={last_output}
+                train_control={train_control}
+                append_logs={append_logs}
+                apply_updated_nodes={apply_updated_nodes}
+                get_workflow={current_workflow}
+                set_running={set_running}
+                set_last_output={set_last_output}
+                request_stop={request_stop}
+            />
+        }}
         {if selected_node_id != "" {
             <NodeInspector
                 workflow={workflow}

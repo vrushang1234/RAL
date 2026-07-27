@@ -3,6 +3,8 @@
 import from endpoints {
     run_single,
     train_step,
+    eval_cell,
+    log_eval_report,
     list_workflows,
     get_workflow,
     save_workflow,

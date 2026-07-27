@@ -1,0 +1,793 @@
+{
+  "schema_version": "1.0.0",
+  "workflow_id": "wf_recruiting",
+  "workflow_name": "Recruiting Pipeline",
+  "workflow_version": 1,
+  "configuration_hash": null,
+  "status": "DRAFT",
+  "description": "Route an application by role, screen it, assess skills, then a decision router picks advance vs reject before the hiring packet is assembled.",
+  "entry_node_id": "trigger_application",
+  "output_node_id": "aggregator_packet",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "input": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "input"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "output": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "output"
+    ]
+  },
+  "global_config": {
+    "max_workflow_runtime_ms": 120000,
+    "max_parallel_nodes": 4,
+    "fail_fast": true,
+    "context_config": {
+      "mode": "SELECTIVE",
+      "max_context_tokens": 16000,
+      "include_upstream_outputs": true,
+      "include_tool_outputs": true,
+      "include_execution_history": false,
+      "shared_memory_enabled": false
+    },
+    "observability_config": {
+      "store_node_inputs": true,
+      "store_node_outputs": true,
+      "store_tool_inputs": true,
+      "store_tool_outputs": true,
+      "store_token_usage": true,
+      "store_latency_metrics": true
+    }
+  },
+  "tool_catalog": [],
+  "skill_catalog": [],
+  "nodes": [
+    {
+      "node_id": "trigger_application",
+      "node_name": "Application Intake",
+      "type": "Trigger",
+      "enabled": true,
+      "fixed_role_description": "Accepts the raw job application as workflow input.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": null,
+      "model_config": null,
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 0,
+        "retry_backoff_ms": 0,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": {
+          "trigger_type": "MANUAL",
+          "config": {}
+        },
+        "router": null,
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "width": 280,
+        "height": 160,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "router_role",
+      "node_name": "Role Router",
+      "type": "Router",
+      "enabled": true,
+      "fixed_role_description": "You classify inbound job applications by role family.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_role_router",
+        "prompt_version": 1,
+        "system_prompt": "Decide if this application is for an engineering or sales role.",
+        "user_prompt_template": "{{workflow_input}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "workflow_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 340,
+          "y": 280
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_eng_screen",
+      "node_name": "Engineering Screener",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are an engineering recruiter screening a software candidate's application.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_eng_screen",
+        "prompt_version": 1,
+        "system_prompt": "Screen it.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the screening summary.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 120
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_sales_screen",
+      "node_name": "Sales Screener",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a sales recruiter screening a go-to-market candidate's application.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_sales_screen",
+        "prompt_version": 1,
+        "system_prompt": "Screen it.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the screening summary.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 440
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_skills",
+      "node_name": "Skills Assessor",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You assess the candidate's skills against the role bar and state a clear hire signal.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_skills",
+        "prompt_version": 1,
+        "system_prompt": "Assess.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the skills assessment with a clear recommendation.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 940,
+          "y": 280
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "router_decision",
+      "node_name": "Decision Router",
+      "type": "Router",
+      "enabled": true,
+      "fixed_role_description": "You decide whether the candidate advances based on the skills assessment.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_decision_router",
+        "prompt_version": 1,
+        "system_prompt": "Advance strong candidates; reject weak ones.",
+        "user_prompt_template": "{{assessment}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "assessment"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 1260,
+          "y": 280
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_interview_plan",
+      "node_name": "Interview Plan Writer",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You design the onsite interview loop for an advancing candidate.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_interview_plan",
+        "prompt_version": 1,
+        "system_prompt": "Plan it.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the interview plan.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 1560,
+          "y": 120
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_rejection",
+      "node_name": "Rejection Writer",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You write a respectful, constructive rejection note for the candidate.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_rejection",
+        "prompt_version": 1,
+        "system_prompt": "Write it.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the rejection note.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 1560,
+          "y": 440
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "aggregator_packet",
+      "node_name": "Hiring Packet",
+      "type": "Aggregator",
+      "enabled": true,
+      "fixed_role_description": "You assemble the final hiring packet summarizing the pipeline outcome.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_packet_agg",
+        "prompt_version": 1,
+        "system_prompt": "Combine.",
+        "user_prompt_template": "{{upstream_outputs}}",
+        "output_instructions": "Produce the final workflow output.",
+        "variables": [
+          "upstream_outputs"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.1,
+        "top_p": 1,
+        "max_output_tokens": 1200,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": null,
+        "aggregator": {
+          "strategy": "SUMMARIZE",
+          "required_upstream_node_ids": [
+            "worker_interview_plan",
+            "worker_rejection"
+          ],
+          "custom_instructions": null
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 1880,
+          "y": 280
+        },
+        "width": 300,
+        "height": 220,
+        "collapsed": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "rec_e1",
+      "source_node_id": "trigger_application",
+      "target_node_id": "router_role",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$.input",
+        "target": "$.workflow_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "rec_e2",
+      "source_node_id": "router_role",
+      "target_node_id": "worker_eng_screen",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "engineering"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "engineering"
+      }
+    },
+    {
+      "edge_id": "rec_e3",
+      "source_node_id": "router_role",
+      "target_node_id": "worker_sales_screen",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "sales"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "sales"
+      }
+    },
+    {
+      "edge_id": "rec_e4",
+      "source_node_id": "worker_eng_screen",
+      "target_node_id": "worker_skills",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "rec_e5",
+      "source_node_id": "worker_sales_screen",
+      "target_node_id": "worker_skills",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "rec_e6",
+      "source_node_id": "worker_skills",
+      "target_node_id": "router_decision",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.assessment"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "rec_e7",
+      "source_node_id": "router_decision",
+      "target_node_id": "worker_interview_plan",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "advance"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "advance"
+      }
+    },
+    {
+      "edge_id": "rec_e8",
+      "source_node_id": "router_decision",
+      "target_node_id": "worker_rejection",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "reject"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "reject"
+      }
+    },
+    {
+      "edge_id": "rec_e9",
+      "source_node_id": "worker_interview_plan",
+      "target_node_id": "aggregator_packet",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_interview_plan"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "rec_e10",
+      "source_node_id": "worker_rejection",
+      "target_node_id": "aggregator_packet",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_rejection"
+      },
+      "ui": {
+        "label": null
+      }
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-07-26T00:00:00Z",
+    "updated_at": "2026-07-26T00:00:00Z",
+    "created_by": "demo",
+    "tags": [
+      "demo",
+      "recruiting",
+      "hiring"
+    ]
+  }
+}

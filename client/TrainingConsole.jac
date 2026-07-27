@@ -2,8 +2,6 @@
 
 sv import from endpoints { run_single, train_step }
 
-import from .demo_workflow { DEMO_DATASET }  # demo_workflow.cl.jac
-
 def log_color(kind: str) -> str {
     if kind == "score" {
         return "#4ade80";
@@ -31,7 +29,8 @@ def:pub TrainingConsole(
     set_last_output: Callable[[str], None],
     request_stop: Callable[[], None]
 ) -> JsxElement {
-    has dataset_text: str = JSON.stringify(DEMO_DATASET, None, 2);
+    # Initialized from the per-workflow dataset prop; caller remounts (key) per workflow.
+    has dataset_text: str = JSON.stringify(dataset, None, 2);
 
     def node_meta(wf: dict, nid: str) -> dict {
         for n in (wf["nodes"] as list) {

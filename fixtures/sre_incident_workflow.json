@@ -1,0 +1,810 @@
+{
+  "schema_version": "1.0.0",
+  "workflow_id": "wf_sre_incident",
+  "workflow_name": "SRE Incident Response",
+  "workflow_version": 1,
+  "configuration_hash": null,
+  "status": "DRAFT",
+  "description": "Classify an alert by severity, sub-route critical alerts by failing service, chain diagnosis into a remediation plan, and aggregate an incident report.",
+  "entry_node_id": "trigger_alert",
+  "output_node_id": "aggregator_incident",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "input": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "input"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "output": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "output"
+    ]
+  },
+  "global_config": {
+    "max_workflow_runtime_ms": 120000,
+    "max_parallel_nodes": 4,
+    "fail_fast": true,
+    "context_config": {
+      "mode": "SELECTIVE",
+      "max_context_tokens": 16000,
+      "include_upstream_outputs": true,
+      "include_tool_outputs": true,
+      "include_execution_history": false,
+      "shared_memory_enabled": false
+    },
+    "observability_config": {
+      "store_node_inputs": true,
+      "store_node_outputs": true,
+      "store_tool_inputs": true,
+      "store_tool_outputs": true,
+      "store_token_usage": true,
+      "store_latency_metrics": true
+    }
+  },
+  "tool_catalog": [],
+  "skill_catalog": [],
+  "nodes": [
+    {
+      "node_id": "trigger_alert",
+      "node_name": "Alert Webhook",
+      "type": "Trigger",
+      "enabled": true,
+      "fixed_role_description": "Accepts the raw monitoring alert as workflow input.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": null,
+      "model_config": null,
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 0,
+        "retry_backoff_ms": 0,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": {
+          "trigger_type": "MANUAL",
+          "config": {}
+        },
+        "router": null,
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "width": 280,
+        "height": 160,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "router_severity",
+      "node_name": "Severity Router",
+      "type": "Router",
+      "enabled": true,
+      "fixed_role_description": "You classify production alerts by severity.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_sev_router",
+        "prompt_version": 1,
+        "system_prompt": "Pick sev1 for full outages, sev2 for degraded service, sev3 for low-risk warnings.",
+        "user_prompt_template": "{{workflow_input}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "workflow_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 340,
+          "y": 280
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "router_service",
+      "node_name": "Service Router",
+      "type": "Router",
+      "enabled": true,
+      "fixed_role_description": "You identify which service tier is failing in a sev1 alert.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_svc_router",
+        "prompt_version": 1,
+        "system_prompt": "Decide if the failing tier is the database or the api.",
+        "user_prompt_template": "{{alert}}",
+        "output_instructions": "Return the selected route.",
+        "variables": [
+          "alert"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0,
+        "top_p": 1,
+        "max_output_tokens": 300,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 30000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": {
+          "routing_mode": "LLM",
+          "route_output_key": "route",
+          "default_target_node_id": null
+        },
+        "worker": null,
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 80
+        },
+        "width": 280,
+        "height": 200,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_db_diag",
+      "node_name": "DB Diagnoser",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a database reliability engineer diagnosing a production database failure.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_db_diag",
+        "prompt_version": 1,
+        "system_prompt": "Diagnose.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the diagnosis.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 920,
+          "y": 0
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_api_diag",
+      "node_name": "API Diagnoser",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are a backend engineer diagnosing a production API failure.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_api_diag",
+        "prompt_version": 1,
+        "system_prompt": "Diagnose.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the diagnosis.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 920,
+          "y": 260
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_oncall",
+      "node_name": "On-Call Responder",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You are the on-call engineer triaging a degraded-service alert.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_oncall",
+        "prompt_version": 1,
+        "system_prompt": "Triage.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the triage notes.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 380
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_remediation",
+      "node_name": "Remediation Planner",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You turn a diagnosis into a concrete remediation plan for the incident.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_remediation",
+        "prompt_version": 1,
+        "system_prompt": "Plan.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the remediation plan.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 1240,
+          "y": 180
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "worker_ticket",
+      "node_name": "Ticket Filer",
+      "type": "WorkerAgent",
+      "enabled": true,
+      "fixed_role_description": "You file a well-formed backlog ticket for a low-severity warning.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "prompt_config": {
+        "prompt_id": "p_ticket",
+        "prompt_version": 1,
+        "system_prompt": "File it.",
+        "user_prompt_template": "{{node_input}}",
+        "output_instructions": "Write the ticket.",
+        "variables": [
+          "node_input"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 1500,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 2,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": {
+          "execution_mode": "TOOL_LOOP",
+          "max_iterations": 5
+        },
+        "aggregator": null
+      },
+      "ui": {
+        "position": {
+          "x": 620,
+          "y": 640
+        },
+        "width": 300,
+        "height": 240,
+        "collapsed": false
+      }
+    },
+    {
+      "node_id": "aggregator_incident",
+      "node_name": "Incident Report",
+      "type": "Aggregator",
+      "enabled": true,
+      "fixed_role_description": "You produce the final incident report for stakeholders.",
+      "expected_input_schema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "expected_output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "output"
+        ]
+      },
+      "prompt_config": {
+        "prompt_id": "p_incident_agg",
+        "prompt_version": 1,
+        "system_prompt": "Combine.",
+        "user_prompt_template": "{{upstream_outputs}}",
+        "output_instructions": "Produce the final workflow output.",
+        "variables": [
+          "upstream_outputs"
+        ]
+      },
+      "model_config": {
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "temperature": 0.1,
+        "top_p": 1,
+        "max_output_tokens": 1200,
+        "seed": null
+      },
+      "skill_bindings": [],
+      "tool_bindings": [],
+      "runtime_config": {
+        "timeout_ms": 60000,
+        "max_retries": 1,
+        "retry_backoff_ms": 1000,
+        "continue_on_failure": false
+      },
+      "type_config": {
+        "trigger": null,
+        "router": null,
+        "worker": null,
+        "aggregator": {
+          "strategy": "SUMMARIZE",
+          "required_upstream_node_ids": [
+            "worker_remediation",
+            "worker_ticket"
+          ],
+          "custom_instructions": null
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 1560,
+          "y": 320
+        },
+        "width": 300,
+        "height": 220,
+        "collapsed": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "sre_e1",
+      "source_node_id": "trigger_alert",
+      "target_node_id": "router_severity",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$.input",
+        "target": "$.workflow_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "sre_e2",
+      "source_node_id": "router_severity",
+      "target_node_id": "router_service",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "sev1"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.alert"
+      },
+      "ui": {
+        "label": "sev1"
+      }
+    },
+    {
+      "edge_id": "sre_e3",
+      "source_node_id": "router_severity",
+      "target_node_id": "worker_oncall",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "sev2"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "sev2"
+      }
+    },
+    {
+      "edge_id": "sre_e4",
+      "source_node_id": "router_severity",
+      "target_node_id": "worker_ticket",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "sev3"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "sev3"
+      }
+    },
+    {
+      "edge_id": "sre_e5",
+      "source_node_id": "router_service",
+      "target_node_id": "worker_db_diag",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "database"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "database"
+      }
+    },
+    {
+      "edge_id": "sre_e6",
+      "source_node_id": "router_service",
+      "target_node_id": "worker_api_diag",
+      "condition": {
+        "type": "ROUTE_VALUE",
+        "expression": null,
+        "route_value": "api"
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": "api"
+      }
+    },
+    {
+      "edge_id": "sre_e7",
+      "source_node_id": "worker_db_diag",
+      "target_node_id": "worker_remediation",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "sre_e8",
+      "source_node_id": "worker_api_diag",
+      "target_node_id": "worker_remediation",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "sre_e9",
+      "source_node_id": "worker_oncall",
+      "target_node_id": "worker_remediation",
+      "condition": {
+        "type": "ALWAYS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.node_input"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "sre_e10",
+      "source_node_id": "worker_remediation",
+      "target_node_id": "aggregator_incident",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_remediation"
+      },
+      "ui": {
+        "label": null
+      }
+    },
+    {
+      "edge_id": "sre_e11",
+      "source_node_id": "worker_ticket",
+      "target_node_id": "aggregator_incident",
+      "condition": {
+        "type": "ON_SUCCESS",
+        "expression": null,
+        "route_value": null
+      },
+      "data_mapping": {
+        "source": "$",
+        "target": "$.upstream_outputs.worker_ticket"
+      },
+      "ui": {
+        "label": null
+      }
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-07-26T00:00:00Z",
+    "updated_at": "2026-07-26T00:00:00Z",
+    "created_by": "demo",
+    "tags": [
+      "demo",
+      "sre",
+      "incident-response"
+    ]
+  }
+}
