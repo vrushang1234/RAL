@@ -17,6 +17,8 @@ That is a rehearsal fixture, not an optimizer.
 The Python path is still importable below as a deliberate fallback (an external
 teammate optimizer can be dropped into `rl_bridge.py`); swap the two marked
 lines in `call_rl` to use it.
+
+Also persists eval-matrix reports via `log_eval_report`.
 """
 >>>>>>> 4d9fe7a (Full loop doe)
 
